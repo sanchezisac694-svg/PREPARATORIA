@@ -1,0 +1,13 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+catalogMode: strict
+
+engineStrict: true
+
+linkWorkspacePackages: false
+
+saveExact: true
+
+sharedWorkspaceLockfile: true
