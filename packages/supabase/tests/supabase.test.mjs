@@ -7,6 +7,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+import {
+  AccountLifecycleError,
+  accountLifecycleErrorCodes,
+  accountLifecycleEventTypes,
+  accountLifecycleReasonCodes,
+  manageInstitutionalAccountLifecycle,
+  safeAccountLifecycleDiagnostic,
+} from "../dist/account-lifecycle.js";
 import { createSupabaseBrowserClient } from "../dist/browser.js";
 import {
   ProvisioningError,
@@ -82,6 +90,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
   }
 
   const supabaseRuntimeFiles = [
+    "account-lifecycle.js",
     "admin-contract.js",
     "browser.js",
     "config.js",
@@ -330,8 +339,12 @@ test("provisioning falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("provisioning");
 });
 
+test("account-lifecycle falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("account-lifecycle");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
-  for (const moduleName of ["ssr", "admin-contract", "provisioning"]) {
+  for (const moduleName of ["ssr", "admin-contract", "provisioning", "account-lifecycle"]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
       process.execPath,
@@ -347,7 +360,14 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
 });
 
 test("las APIs públicas son limitadas y no exponen capacidades generales del SDK", async () => {
-  const files = ["admin-contract.ts", "browser.ts", "provisioning.ts", "ssr.ts", "types.ts"];
+  const files = [
+    "account-lifecycle.ts",
+    "admin-contract.ts",
+    "browser.ts",
+    "provisioning.ts",
+    "ssr.ts",
+    "types.ts",
+  ];
   const sources = await Promise.all(
     files.map((file) => readFile(new URL(`../src/${file}`, import.meta.url), "utf8")),
   );
@@ -545,4 +565,66 @@ test("redacta correo y valores sensibles de diagnósticos", () => {
     message: "Falló [REDACTED]",
     token: "[REDACTED]",
   });
+});
+
+test("el servicio de ciclo de vida delega comandos tipados sin red", async () => {
+  const command = {
+    accountId: "account-test",
+    idempotencyKey: "operation-test",
+    operation: "ACCOUNT_SUSPENDED",
+    reasonCode: "ADMINISTRATIVE_SUSPENSION",
+    resultingStatus: "SUSPENDED",
+  };
+  const expected = {
+    accountId: command.accountId,
+    eventType: command.operation,
+    idempotencyKey: command.idempotencyKey,
+    personId: "person-test",
+    status: command.resultingStatus,
+  };
+  let calls = 0;
+  const result = await manageInstitutionalAccountLifecycle(command, "actor-test", {
+    async execute(received, actor) {
+      calls += 1;
+      assert.deepEqual(received, command);
+      assert.equal(actor, "actor-test");
+      return expected;
+    },
+  });
+  assert.deepEqual(result, expected);
+  assert.equal(calls, 1);
+});
+
+test("normaliza fallos del puerto y conserva errores cerrados", async () => {
+  const command = {
+    accountId: "account-test",
+    idempotencyKey: "operation-test",
+    operation: "ACCOUNT_BLOCKED",
+    reasonCode: "SECURITY_REVIEW",
+    resultingStatus: "BLOCKED",
+  };
+  await assert.rejects(
+    manageInstitutionalAccountLifecycle(command, "actor-test", {
+      async execute() {
+        throw new Error("sensitive internal detail");
+      },
+    }),
+    (error) =>
+      error instanceof AccountLifecycleError &&
+      error.code === "LIFECYCLE_OPERATION_FAILED" &&
+      !error.message.includes("sensitive"),
+  );
+  assert.ok(accountLifecycleErrorCodes.includes("IDEMPOTENCY_CONFLICT"));
+  assert.ok(accountLifecycleEventTypes.includes("ACTIVATION_CONFIRMED"));
+  assert.ok(accountLifecycleReasonCodes.includes("REACTIVATION_APPROVED"));
+});
+
+test("redacta diagnósticos del ciclo de vida", () => {
+  assert.deepEqual(
+    safeAccountLifecycleDiagnostic({
+      email: "sensitive@example.invalid",
+      token: "secret-token",
+    }),
+    { email: "[REDACTED]", token: "[REDACTED]" },
+  );
 });

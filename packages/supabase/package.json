@@ -12,6 +12,10 @@
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
+    "./account-lifecycle": {
+      "types": "./src/account-lifecycle.ts",
+      "default": "./dist/account-lifecycle.js"
+    },
     "./provisioning": {
       "types": "./src/provisioning.ts",
       "default": "./dist/provisioning.js"

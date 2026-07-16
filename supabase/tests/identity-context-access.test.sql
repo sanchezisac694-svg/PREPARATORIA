@@ -79,14 +79,14 @@ values
     '53000000-0000-0000-0000-000000000006',
     '52000000-0000-0000-0000-000000000006',
     '51000000-0000-0000-0000-000000000006',
-    'SUSPENDED',
+    'ACTIVE',
     null
   ),
   (
     '53000000-0000-0000-0000-000000000007',
     '52000000-0000-0000-0000-000000000007',
     '51000000-0000-0000-0000-000000000007',
-    'BLOCKED',
+    'ACTIVE',
     null
   ),
   (
@@ -110,6 +110,15 @@ values
     'ACTIVE',
     null
   );
+
+select set_config('core.account_lifecycle_transition_allowed', 'on', true);
+update core.accounts
+set account_status = 'SUSPENDED', suspended_at = now()
+where id = '53000000-0000-0000-0000-000000000006';
+update core.accounts
+set account_status = 'BLOCKED', blocked_at = now()
+where id = '53000000-0000-0000-0000-000000000007';
+select set_config('core.account_lifecycle_transition_allowed', 'off', true);
 
 insert into core.account_roles (account_id, role_id)
 select '53000000-0000-0000-0000-000000000003', id
@@ -522,7 +531,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'core'
       and c.relkind = 'r'
-  ) <> 7 then
+  ) <> 8 then
     raise exception 'FAIL reversal changed tables';
   end if;
 

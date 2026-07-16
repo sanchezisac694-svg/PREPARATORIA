@@ -22,14 +22,19 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 4, "Fase 2 debe contener exactamente cuatro migraciones SQL");
+assert.equal(migrationFiles.length, 5, "Fase 2 debe contener exactamente cinco migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
 const ownContextMigration = await readFile(join(migrationsDirectory, migrationFiles[2]), "utf8");
 const provisioningMigration = await readFile(join(migrationsDirectory, migrationFiles[3]), "utf8");
+const lifecycleMigration = await readFile(join(migrationsDirectory, migrationFiles[4]), "utf8");
 const provisioningSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "provisioning.ts"),
+  "utf8",
+);
+const lifecycleSource = await readFile(
+  join(repositoryRoot, "packages", "supabase", "src", "account-lifecycle.ts"),
   "utf8",
 );
 const config = await readFile(configPath, "utf8");
@@ -67,16 +72,18 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las cuatro migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las cinco migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
   assert.match(migrationFiles[3], /^\d{14}_add_identity_provisioning_saga\.sql$/);
+  assert.match(migrationFiles[4], /^\d{14}_add_account_lifecycle_control\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
     ownContextMigration,
     provisioningMigration,
+    lifecycleMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
@@ -90,6 +97,41 @@ function valuesFromProvisioningEnum(typeName) {
   assert.ok(match, `No se encontró el enum core.${typeName}`);
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
+
+function valuesFromLifecycleEnum(typeName) {
+  const match = lifecycleMigration.match(
+    new RegExp(`create type core\\.${typeName} as enum \\(([\\s\\S]*?)\\);`, "i"),
+  );
+  assert.ok(match, `No se encontró el enum core.${typeName}`);
+  return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
+}
+
+function lifecycleArray(constantName) {
+  const match = lifecycleSource.match(
+    new RegExp(`${constantName} = Object\\.freeze\\(\\[([\\s\\S]*?)\\] as const\\)`),
+  );
+  assert.ok(match, `No se encontró ${constantName}`);
+  return [...match[1].matchAll(/"([A-Z_]+)"/g)].map((value) => value[1]);
+}
+
+test("catálogos SQL y TypeScript de ciclo de vida permanecen sincronizados", () => {
+  assert.deepEqual(
+    valuesFromLifecycleEnum("account_lifecycle_event_type"),
+    lifecycleArray("accountLifecycleEventTypes"),
+  );
+  assert.deepEqual(
+    valuesFromLifecycleEnum("account_lifecycle_reason_code"),
+    lifecycleArray("accountLifecycleReasonCodes"),
+  );
+  assert.deepEqual(
+    valuesFromLifecycleEnum("account_lifecycle_error_code"),
+    lifecycleArray("accountLifecycleErrorCodes"),
+  );
+  assert.deepEqual(
+    valuesFromEnum("account_status").sort(),
+    [...accountStatusValues].sort(),
+  );
+});
 
 function valuesFromReadonlyArray(constantName) {
   const match = provisioningSource.match(
@@ -246,7 +288,7 @@ test("no concede acceso directo a tablas y limita EXECUTE", () => {
 });
 
 test("mantiene core fuera de Data API y no contiene datos prohibidos", () => {
-  const combined = `${initialMigration}\n${authContextMigration}\n${ownContextMigration}\n${provisioningMigration}\n${config}`;
+  const combined = `${initialMigration}\n${authContextMigration}\n${ownContextMigration}\n${provisioningMigration}\n${lifecycleMigration}\n${config}`;
 
   assert.match(config, /schemas = \["public", "graphql_public"\]/);
   assert.doesNotMatch(config, /schemas\s*=\s*\[[^\]]*"core"/i);

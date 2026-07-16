@@ -24,6 +24,7 @@ export const accountStatusTransitions = Object.freeze({
   ]),
   [accountStatuses.PENDING_ACTIVATION]: Object.freeze([
     accountStatuses.ACTIVE,
+    accountStatuses.BLOCKED,
     accountStatuses.DISABLED,
   ]),
   [accountStatuses.ACTIVE]: Object.freeze([
@@ -36,8 +37,15 @@ export const accountStatusTransitions = Object.freeze({
     accountStatuses.BLOCKED,
     accountStatuses.DISABLED,
   ]),
-  [accountStatuses.BLOCKED]: Object.freeze([accountStatuses.ACTIVE, accountStatuses.DISABLED]),
-  [accountStatuses.DISABLED]: Object.freeze([]),
+  [accountStatuses.BLOCKED]: Object.freeze([
+    accountStatuses.ACTIVE,
+    accountStatuses.SUSPENDED,
+    accountStatuses.DISABLED,
+  ]),
+  [accountStatuses.DISABLED]: Object.freeze([
+    accountStatuses.PENDING_ACTIVATION,
+    accountStatuses.ACTIVE,
+  ]),
 }) satisfies Readonly<Record<AccountStatus, readonly AccountStatus[]>>;
 
 export function canTransitionAccountStatus(from: AccountStatus, to: AccountStatus): boolean;

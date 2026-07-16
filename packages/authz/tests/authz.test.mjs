@@ -220,14 +220,21 @@ test("solo permite transiciones de cuenta expresamente declaradas", () => {
   }
 });
 
-test("rechaza transiciones arbitrarias o posteriores a desactivación", () => {
+test("rechaza transiciones arbitrarias y permite reactivación administrativa explícita", () => {
   assert.equal(
     canTransitionAccountStatus(accountStatuses.PENDING_INVITATION, accountStatuses.ACTIVE),
     false,
   );
-  assert.equal(canTransitionAccountStatus(accountStatuses.DISABLED, accountStatuses.ACTIVE), false);
+  assert.equal(canTransitionAccountStatus(accountStatuses.DISABLED, accountStatuses.ACTIVE), true);
+  assert.equal(
+    canTransitionAccountStatus(accountStatuses.DISABLED, accountStatuses.PENDING_ACTIVATION),
+    true,
+  );
   assert.equal(canTransitionAccountStatus(accountStatuses.ACTIVE, accountStatuses.ACTIVE), false);
-  assert.deepEqual(accountStatusTransitions[accountStatuses.DISABLED], []);
+  assert.deepEqual(accountStatusTransitions[accountStatuses.DISABLED], [
+    accountStatuses.PENDING_ACTIVATION,
+    accountStatuses.ACTIVE,
+  ]);
 });
 
 test("el catálogo de estados es exacto, cerrado y diferencia bloqueo de suspensión", () => {
