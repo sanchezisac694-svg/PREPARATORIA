@@ -16,6 +16,7 @@ export type ProfileId = string & { readonly [profileIdBrand]: "ProfileId" };
 export interface AuthIdentityContext {
   readonly accountId: AccountId | null;
   readonly accountStatus: AccountStatus | null;
+  readonly allowedApplications: readonly Application[];
   readonly authUserId: AuthUserId | null;
   readonly personId: PersonId | null;
   readonly roleCodes: readonly Role[];
