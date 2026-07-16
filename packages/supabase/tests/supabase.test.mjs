@@ -8,6 +8,12 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { createSupabaseBrowserClient } from "../dist/browser.js";
+import {
+  ProvisioningError,
+  provisionInstitutionalIdentity,
+  provisioningErrorCodes,
+  safeProvisioningDiagnostic,
+} from "../dist/provisioning.js";
 import { createSupabaseSsrClient } from "../dist/ssr.js";
 
 const validConfig = {
@@ -79,6 +85,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "admin-contract.js",
     "browser.js",
     "config.js",
+    "provisioning.js",
     "ssr.js",
     "types.js",
   ];
@@ -140,6 +147,16 @@ async function linkFixtureDependencies(fixtureDirectory) {
     symlink(
       realpathSync(join(repositoryRoot, "packages", "env", "node_modules", "zod")),
       join(fixtureNodeModules, "zod"),
+      linkType,
+    ),
+    symlink(
+      realpathSync(join(repositoryRoot, "packages", "shared")),
+      join(fixtureScope, "shared"),
+      linkType,
+    ),
+    symlink(
+      realpathSync(join(repositoryRoot, "packages", "authz")),
+      join(fixtureScope, "authz"),
       linkType,
     ),
   ]);
@@ -309,8 +326,12 @@ test("admin-contract falla al importarse desde un Client Component", async () =>
   await expectClientBuildFailure("admin-contract");
 });
 
+test("provisioning falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("provisioning");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
-  for (const moduleName of ["ssr", "admin-contract"]) {
+  for (const moduleName of ["ssr", "admin-contract", "provisioning"]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
       process.execPath,
@@ -326,7 +347,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
 });
 
 test("las APIs públicas son limitadas y no exponen capacidades generales del SDK", async () => {
-  const files = ["admin-contract.ts", "browser.ts", "ssr.ts", "types.ts"];
+  const files = ["admin-contract.ts", "browser.ts", "provisioning.ts", "ssr.ts", "types.ts"];
   const sources = await Promise.all(
     files.map((file) => readFile(new URL(`../src/${file}`, import.meta.url), "utf8")),
   );
@@ -339,4 +360,189 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
   assert.doesNotMatch(source, /service_role/i);
   assert.doesNotMatch(source, /SUPABASE_SECRET_KEY/);
   assert.doesNotMatch(source, /process\.env/);
+});
+
+const provisioningCommand = {
+  accountId: "account-test",
+  deliveryMode: "INVITE",
+  email: "sensitive@example.invalid",
+  idempotencyKey: "idempotency-test",
+  initialRoleCodes: ["ALUMNO"],
+  personId: "person-test",
+  requestedAccountStatus: "PENDING_INVITATION",
+  requestedByAccountId: "actor-test",
+};
+
+function createProvisioningScenario(options = {}) {
+  const calls = [];
+  let record = {
+    accountId: provisioningCommand.accountId,
+    authUserCreatedByRequest: null,
+    authUserId: null,
+    id: "request-test",
+    stage: options.initialStage ?? "PREPARED",
+  };
+
+  const persistence = {
+    async finalize() {
+      calls.push("finalize");
+      if (options.finalizeError) throw options.finalizeError;
+      record = { ...record, stage: "COMPLETED" };
+      return record;
+    },
+    async markAuthPending() {
+      calls.push("markAuthPending");
+      record = { ...record, stage: "AUTH_PENDING" };
+      return record;
+    },
+    async markCompensation(_requestId, succeeded) {
+      calls.push(`markCompensation:${String(succeeded)}`);
+      record = {
+        ...record,
+        stage:
+          succeeded === null
+            ? "COMPENSATION_PENDING"
+            : succeeded
+              ? "COMPENSATED"
+              : "RETRYABLE_FAILURE",
+      };
+      return record;
+    },
+    async markFailure(_requestId, input) {
+      calls.push(`markFailure:${input.code}`);
+      record = {
+        ...record,
+        stage: input.retryable ? "RETRYABLE_FAILURE" : "TERMINAL_FAILURE",
+      };
+      return record;
+    },
+    async prepare() {
+      calls.push("prepare");
+      return record;
+    },
+    async recordAuthCreated(_requestId, result) {
+      calls.push("recordAuthCreated");
+      record = {
+        ...record,
+        authUserCreatedByRequest: result.createdByOperation,
+        authUserId: result.authUserId,
+        stage: "AUTH_CREATED",
+      };
+      return record;
+    },
+  };
+
+  const authAdmin = {
+    async createOrInviteUser() {
+      calls.push("createOrInviteUser");
+      if (options.createError) throw options.createError;
+      return {
+        authUserId: "auth-user-test",
+        createdByOperation: options.createdByOperation ?? true,
+      };
+    },
+    async deleteProvisionedUser() {
+      calls.push("deleteProvisionedUser");
+      if (options.deleteError) throw options.deleteError;
+      return { deleted: options.deleted ?? true };
+    },
+    async getProvisionedUser() {
+      calls.push("getProvisionedUser");
+      return options.reconciledResult ?? null;
+    },
+  };
+
+  return { authAdmin, calls, persistence };
+}
+
+test("el orquestador completa e idempotiza sin duplicar el usuario Auth", async () => {
+  const scenario = createProvisioningScenario();
+
+  const first = await provisionInstitutionalIdentity(provisioningCommand, scenario);
+  const second = await provisionInstitutionalIdentity(provisioningCommand, scenario);
+
+  assert.equal(first.stage, "COMPLETED");
+  assert.equal(second.stage, "COMPLETED");
+  assert.equal(scenario.calls.filter((call) => call === "createOrInviteUser").length, 1);
+  assert.equal(scenario.calls.filter((call) => call === "finalize").length, 1);
+});
+
+test("clasifica fallos reintentables, terminales y resultados inciertos", async () => {
+  for (const [code, retryable, expectedCall] of [
+    [provisioningErrorCodes.AUTH_PROVIDER_RETRYABLE_FAILURE, true, "markFailure"],
+    [provisioningErrorCodes.AUTH_PROVIDER_TERMINAL_FAILURE, false, "markFailure"],
+    [provisioningErrorCodes.AUTH_RESULT_UNKNOWN, false, "markCompensation:null"],
+  ]) {
+    const scenario = createProvisioningScenario({
+      createError: new ProvisioningError(code, retryable),
+    });
+    await assert.rejects(
+      provisionInstitutionalIdentity(provisioningCommand, scenario),
+      (error) => error.code === code,
+    );
+    assert.ok(scenario.calls.some((call) => call.startsWith(expectedCall)));
+    assert.equal(scenario.calls.includes("deleteProvisionedUser"), false);
+  }
+});
+
+test("reconcilia AUTH_PENDING sin crear inmediatamente otro usuario", async () => {
+  const scenario = createProvisioningScenario({
+    initialStage: "AUTH_PENDING",
+    reconciledResult: { authUserId: "auth-user-existing", createdByOperation: true },
+  });
+
+  const result = await provisionInstitutionalIdentity(provisioningCommand, scenario);
+
+  assert.equal(result.stage, "COMPLETED");
+  assert.equal(scenario.calls.includes("getProvisionedUser"), true);
+  assert.equal(scenario.calls.includes("createOrInviteUser"), false);
+});
+
+test("compensa un usuario creado por la operación si falla la finalización", async () => {
+  const scenario = createProvisioningScenario({
+    finalizeError: new Error("database unavailable"),
+  });
+
+  await assert.rejects(
+    provisionInstitutionalIdentity(provisioningCommand, scenario),
+    (error) => error.code === provisioningErrorCodes.FINALIZATION_FAILED,
+  );
+  assert.ok(scenario.calls.includes("deleteProvisionedUser"));
+  assert.ok(scenario.calls.includes("markCompensation:true"));
+});
+
+test("no elimina usuarios preexistentes y reporta compensación fallida", async () => {
+  const preexisting = createProvisioningScenario({
+    createdByOperation: false,
+    finalizeError: new Error("database unavailable"),
+  });
+  await assert.rejects(
+    provisionInstitutionalIdentity(provisioningCommand, preexisting),
+    (error) => error.code === provisioningErrorCodes.FINALIZATION_FAILED,
+  );
+  assert.equal(preexisting.calls.includes("deleteProvisionedUser"), false);
+
+  const failedCompensation = createProvisioningScenario({
+    deleteError: new Error("provider unavailable"),
+    finalizeError: new Error("database unavailable"),
+  });
+  await assert.rejects(
+    provisionInstitutionalIdentity(provisioningCommand, failedCompensation),
+    (error) => error.code === provisioningErrorCodes.COMPENSATION_FAILED,
+  );
+  assert.ok(failedCompensation.calls.includes("markCompensation:false"));
+});
+
+test("redacta correo y valores sensibles de diagnósticos", () => {
+  const diagnostic = safeProvisioningDiagnostic({
+    email: provisioningCommand.email,
+    message: `Falló ${provisioningCommand.email}`,
+    token: "not-a-real-token",
+  });
+
+  assert.deepEqual(diagnostic, {
+    email: "[REDACTED]",
+    message: "Falló [REDACTED]",
+    token: "[REDACTED]",
+  });
 });

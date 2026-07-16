@@ -1,5 +1,8 @@
 begin;
 
+select plan(9);
+savepoint data_changes;
+
 insert into auth.users (
   instance_id,
   id,
@@ -74,6 +77,8 @@ values
     null
   );
 
+select lives_ok(
+  $pgtap$
 do $integrity$
 begin
   if not exists (
@@ -122,10 +127,15 @@ begin
   raise notice 'PASS FK, uniqueness, deletion restriction and nullable link';
 end;
 $integrity$;
+$pgtap$,
+  'FK, unicidad, restricción de borrado y vínculo Auth nullable'
+);
 
 select set_config('request.jwt.claim.sub', '', true);
 set local role authenticated;
 
+select lives_ok(
+  $pgtap$
 do $no_session$
 begin
   if core.current_auth_user_id() is not null
@@ -138,6 +148,9 @@ begin
   raise notice 'PASS no-session context is null or empty';
 end;
 $no_session$;
+$pgtap$,
+  'el contexto sin sesión es nulo o vacío'
+);
 
 select set_config(
   'request.jwt.claim.sub',
@@ -145,6 +158,8 @@ select set_config(
   true
 );
 
+select lives_ok(
+  $pgtap$
 do $unlinked$
 begin
   if core.current_auth_user_id() <> '41000000-0000-0000-0000-000000000099'
@@ -157,6 +172,9 @@ begin
   raise notice 'PASS unlinked session returns no institutional context';
 end;
 $unlinked$;
+$pgtap$,
+  'una sesión sin cuenta vinculada no obtiene contexto institucional'
+);
 
 reset role;
 
@@ -186,6 +204,8 @@ select set_config(
 );
 set local role authenticated;
 
+select lives_ok(
+  $pgtap$
 do $linked$
 begin
   if core.current_auth_user_id() <> '41000000-0000-0000-0000-000000000001'
@@ -198,6 +218,9 @@ begin
   raise notice 'PASS linked account, person, status and active role filtering';
 end;
 $linked$;
+$pgtap$,
+  'cuenta vinculada, persona, estado y roles activos son correctos'
+);
 
 reset role;
 select set_config(
@@ -207,6 +230,8 @@ select set_config(
 );
 set local role authenticated;
 
+select lives_ok(
+  $pgtap$
 do $disabled$
 begin
   if core.current_auth_user_id() <> '41000000-0000-0000-0000-000000000002'
@@ -219,23 +244,28 @@ begin
   raise notice 'PASS DISABLED account excluded while status remains observable';
 end;
 $disabled$;
+$pgtap$,
+  'una cuenta DISABLED queda excluida conservando estado observable'
+);
 
 reset role;
 select set_config('request.jwt.claim.sub', '', true);
 
+select lives_ok(
+  $pgtap$
 do $security$
 declare
   core_oid oid;
 begin
   select oid into core_oid from pg_namespace where nspname = 'core';
 
-  if exists (
-    select 1
+  if (
+    select count(*)
     from pg_policy p
     join pg_class c on c.oid = p.polrelid
     where c.relnamespace = core_oid
-  ) then
-    raise exception 'FAIL new RLS policies found';
+  ) <> 4 then
+    raise exception 'FAIL unexpected RLS policy count';
   end if;
 
   if (
@@ -244,7 +274,7 @@ begin
     where relnamespace = core_oid
       and relkind = 'r'
       and relrowsecurity
-  ) <> 4 then
+  ) <> 7 then
     raise exception 'FAIL RLS changed';
   end if;
 
@@ -307,9 +337,14 @@ begin
   raise notice 'PASS owners, security modes, search_path, grants, RLS and Data API isolation';
 end;
 $security$;
+$pgtap$,
+  'propietarios, modos, search_path, grants, RLS y Data API son seguros'
+);
 
-rollback;
+rollback to savepoint data_changes;
 
+select lives_ok(
+  $pgtap$
 do $cleanup$
 begin
   if exists (
@@ -325,8 +360,11 @@ begin
   raise notice 'PASS synthetic users, claims and institutional data rolled back';
 end;
 $cleanup$;
+$pgtap$,
+  'los usuarios Auth y datos sintéticos se revierten'
+);
 
-begin;
+savepoint reversal;
 
 revoke execute on function core.current_auth_user_id() from authenticated;
 revoke execute on function core.current_account_id() from authenticated;
@@ -334,6 +372,11 @@ revoke execute on function core.current_person_id() from authenticated;
 revoke execute on function core.current_account_status() from authenticated;
 revoke execute on function core.current_role_codes() from authenticated;
 revoke usage on schema core from authenticated;
+
+drop policy accounts_select_own_active_context on core.accounts;
+drop policy people_select_own_active_context on core.people;
+drop policy account_roles_select_own_active_context on core.account_roles;
+drop policy roles_select_own_active_context on core.roles;
 
 drop function core.current_person_id();
 drop function core.current_role_codes();
@@ -344,6 +387,8 @@ drop function core.current_auth_user_id();
 alter table core.accounts
 drop constraint accounts_auth_user_id_fkey;
 
+select lives_ok(
+  $pgtap$
 do $reversal$
 begin
   if exists (
@@ -377,9 +422,14 @@ begin
   raise notice 'PASS local reversal returns to the Block 3 structure';
 end;
 $reversal$;
+$pgtap$,
+  'la reversión local vuelve a la estructura del Bloque 3'
+);
 
-rollback;
+rollback to savepoint reversal;
 
+select lives_ok(
+  $pgtap$
 do $reversal_restored$
 begin
   if not exists (
@@ -403,3 +453,9 @@ begin
   raise notice 'PASS rollback restores the Block 4 migration';
 end;
 $reversal_restored$;
+$pgtap$,
+  'el rollback restaura la migración del Bloque 4'
+);
+
+select * from finish();
+rollback;

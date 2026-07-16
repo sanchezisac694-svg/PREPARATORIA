@@ -139,9 +139,15 @@ importers:
 
   packages/supabase:
     dependencies:
+      '@preparatoria/authz':
+        specifier: workspace:*
+        version: link:../authz
       '@preparatoria/env':
         specifier: workspace:*
         version: link:../env
+      '@preparatoria/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@supabase/ssr':
         specifier: 0.12.3
         version: 0.12.3(@supabase/supabase-js@2.110.6)

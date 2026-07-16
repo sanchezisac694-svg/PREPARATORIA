@@ -12,6 +12,10 @@
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
+    "./provisioning": {
+      "types": "./src/provisioning.ts",
+      "default": "./dist/provisioning.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"
@@ -25,10 +29,12 @@
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @preparatoria/env build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/supabase.test.mjs"
+    "test": "pnpm --filter @preparatoria/env build && pnpm --filter @preparatoria/shared build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/supabase.test.mjs"
   },
   "dependencies": {
+    "@preparatoria/authz": "workspace:*",
     "@preparatoria/env": "workspace:*",
+    "@preparatoria/shared": "workspace:*",
     "@supabase/ssr": "0.12.3",
     "@supabase/supabase-js": "2.110.6",
     "server-only": "0.0.1"

@@ -1,5 +1,8 @@
 begin;
 
+select plan(10);
+savepoint data_changes;
+
 insert into auth.users (
   instance_id,
   id,
@@ -156,6 +159,8 @@ set local role authenticated;
 
 select set_config('request.jwt.claim.sub', '', true);
 
+select lives_ok(
+  $pgtap$
 do $no_session$
 declare
   context record;
@@ -172,6 +177,9 @@ begin
   raise notice 'PASS no-session context';
 end;
 $no_session$;
+$pgtap$,
+  'el contexto propio sin sesión es vacío'
+);
 
 select set_config(
   'request.jwt.claim.sub',
@@ -179,6 +187,8 @@ select set_config(
   true
 );
 
+select lives_ok(
+  $pgtap$
 do $unlinked$
 declare
   context record;
@@ -195,7 +205,12 @@ begin
   raise notice 'PASS unlinked session context';
 end;
 $unlinked$;
+$pgtap$,
+  'una sesión sin vínculo no obtiene contexto propio'
+);
 
+select lives_ok(
+  $pgtap$
 do $states_and_access$
 declare
   context record;
@@ -291,6 +306,9 @@ begin
   raise notice 'PASS all account states, roles and application unions';
 end;
 $states_and_access$;
+$pgtap$,
+  'estados, roles activos y aplicaciones permitidas coinciden'
+);
 
 select set_config(
   'request.jwt.claim.sub',
@@ -298,6 +316,8 @@ select set_config(
   true
 );
 
+select lives_ok(
+  $pgtap$
 do $isolation$
 declare
   context record;
@@ -312,7 +332,12 @@ begin
   raise notice 'PASS user A cannot obtain user B context';
 end;
 $isolation$;
+$pgtap$,
+  'un usuario no puede obtener el contexto de otro'
+);
 
+select lives_ok(
+  $pgtap$
 do $direct_access$
 begin
   begin
@@ -338,10 +363,15 @@ begin
   raise notice 'PASS authenticated direct table SELECT denied';
 end;
 $direct_access$;
+$pgtap$,
+  'authenticated no obtiene SELECT directo sobre tablas core'
+);
 
 reset role;
 set local role anon;
 
+select lives_ok(
+  $pgtap$
 do $anon_denied$
 begin
   begin
@@ -352,9 +382,14 @@ begin
   end;
 end;
 $anon_denied$;
+$pgtap$,
+  'anon no puede ejecutar la función de contexto propio'
+);
 
 reset role;
 
+select lives_ok(
+  $pgtap$
 do $metadata$
 declare
   function_oid oid;
@@ -424,9 +459,14 @@ begin
   raise notice 'PASS grants, policies, SECURITY DEFINER and search_path';
 end;
 $metadata$;
+$pgtap$,
+  'grants, políticas, SECURITY DEFINER y search_path son correctos'
+);
 
-rollback;
+rollback to savepoint data_changes;
 
+select lives_ok(
+  $pgtap$
 do $cleanup$
 begin
   if exists (
@@ -439,8 +479,11 @@ begin
   raise notice 'PASS synthetic identities and claims rolled back';
 end;
 $cleanup$;
+$pgtap$,
+  'identidades y claims sintéticos se revierten'
+);
 
-begin;
+savepoint reversal;
 
 revoke execute on function core.get_current_identity_context() from authenticated;
 drop function core.get_current_identity_context();
@@ -449,6 +492,8 @@ drop policy people_select_own_active_context on core.people;
 drop policy account_roles_select_own_active_context on core.account_roles;
 drop policy roles_select_own_active_context on core.roles;
 
+select lives_ok(
+  $pgtap$
 do $reversal$
 begin
   if exists (
@@ -477,7 +522,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'core'
       and c.relkind = 'r'
-  ) <> 4 then
+  ) <> 7 then
     raise exception 'FAIL reversal changed tables';
   end if;
 
@@ -494,9 +539,14 @@ begin
   raise notice 'PASS local reversal returns to Block 4';
 end;
 $reversal$;
+$pgtap$,
+  'la reversión local vuelve al Bloque 4'
+);
 
-rollback;
+rollback to savepoint reversal;
 
+select lives_ok(
+  $pgtap$
 do $reversal_restored$
 begin
   if (
@@ -511,3 +561,9 @@ begin
   raise notice 'PASS rollback restores Block 5';
 end;
 $reversal_restored$;
+$pgtap$,
+  'el rollback restaura el Bloque 5'
+);
+
+select * from finish();
+rollback;

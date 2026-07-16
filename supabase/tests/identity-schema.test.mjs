@@ -22,11 +22,16 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 3, "Fase 2 debe contener exactamente tres migraciones SQL");
+assert.equal(migrationFiles.length, 4, "Fase 2 debe contener exactamente cuatro migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
 const ownContextMigration = await readFile(join(migrationsDirectory, migrationFiles[2]), "utf8");
+const provisioningMigration = await readFile(join(migrationsDirectory, migrationFiles[3]), "utf8");
+const provisioningSource = await readFile(
+  join(repositoryRoot, "packages", "supabase", "src", "provisioning.ts"),
+  "utf8",
+);
 const config = await readFile(configPath, "utf8");
 
 function valuesFromEnum(typeName) {
@@ -62,14 +67,71 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las tres migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las cuatro migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
-  for (const migration of [initialMigration, authContextMigration, ownContextMigration]) {
+  assert.match(migrationFiles[3], /^\d{14}_add_identity_provisioning_saga\.sql$/);
+  for (const migration of [
+    initialMigration,
+    authContextMigration,
+    ownContextMigration,
+    provisioningMigration,
+  ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
   }
+});
+
+function valuesFromProvisioningEnum(typeName) {
+  const match = provisioningMigration.match(
+    new RegExp(`create type core\\.${typeName} as enum \\(([\\s\\S]*?)\\);`, "i"),
+  );
+  assert.ok(match, `No se encontró el enum core.${typeName}`);
+  return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
+}
+
+function valuesFromReadonlyArray(constantName) {
+  const match = provisioningSource.match(
+    new RegExp(`${constantName} = Object\\.freeze\\(\\[([\\s\\S]*?)\\] as const\\)`),
+  );
+  assert.ok(match, `No se encontró ${constantName}`);
+  return [...match[1].matchAll(/"([A-Z_]+)"/g)].map((value) => value[1]);
+}
+
+test("catálogos SQL y TypeScript de aprovisionamiento permanecen sincronizados", () => {
+  assert.deepEqual(
+    valuesFromProvisioningEnum("identity_provisioning_stage"),
+    valuesFromReadonlyArray("provisioningStages"),
+  );
+  assert.deepEqual(
+    valuesFromProvisioningEnum("identity_provisioning_delivery_mode"),
+    valuesFromReadonlyArray("provisioningDeliveryModes"),
+  );
+  const errorObject = provisioningSource.match(
+    /provisioningErrorCodes = Object\.freeze\(\{([\s\S]*?)\} as const\)/,
+  );
+  assert.ok(errorObject, "No se encontró provisioningErrorCodes");
+  assert.deepEqual(
+    valuesFromProvisioningEnum("identity_provisioning_error_code"),
+    [...errorObject[1].matchAll(/:\s*"([A-Z_]+)"/g)].map((value) => value[1]),
+  );
+});
+
+test("la saga crea exactamente sus tres tablas y evita Auth SQL productivo", () => {
+  assert.deepEqual(
+    [...provisioningMigration.matchAll(/create table core\.([a-z_]+)/gi)].map((match) => match[1]),
+    [
+      "identity_provisioning_requests",
+      "identity_provisioning_requested_roles",
+      "identity_provisioning_events",
+    ],
+  );
+  assert.doesNotMatch(
+    provisioningMigration,
+    /(insert|update|delete)\s+(into|from)?\s*auth\.users/i,
+  );
+  assert.doesNotMatch(provisioningMigration, /create\s+trigger[\s\S]*on\s+auth\.users/i);
 });
 
 test("las migraciones previas conservan tablas, catálogos, FK y funciones", () => {
@@ -184,7 +246,7 @@ test("no concede acceso directo a tablas y limita EXECUTE", () => {
 });
 
 test("mantiene core fuera de Data API y no contiene datos prohibidos", () => {
-  const combined = `${initialMigration}\n${authContextMigration}\n${ownContextMigration}\n${config}`;
+  const combined = `${initialMigration}\n${authContextMigration}\n${ownContextMigration}\n${provisioningMigration}\n${config}`;
 
   assert.match(config, /schemas = \["public", "graphql_public"\]/);
   assert.doesNotMatch(config, /schemas\s*=\s*\[[^\]]*"core"/i);
