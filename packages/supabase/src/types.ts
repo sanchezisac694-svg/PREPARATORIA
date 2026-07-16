@@ -1,5 +1,3 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 export interface SupabasePublicConfig {
   publishableKey: string;
   url: string;
@@ -26,10 +24,25 @@ export interface SsrCookieAdapter {
   setAll(cookies: CookieValue[]): void | Promise<void>;
 }
 
-export type TechnicalSupabaseClient = SupabaseClient;
+export interface TechnicalSupabaseAdapter {
+  isInitialized(): boolean;
+  readonly runtime: "administrative" | "browser" | "server";
+}
 
-export type SupabaseInitializationResult =
-  { client: TechnicalSupabaseClient; ok: true } | { error: SupabaseInitializationError; ok: false };
+export interface BrowserSupabaseAdapter extends TechnicalSupabaseAdapter {
+  readonly runtime: "browser";
+}
+
+export interface SsrSupabaseAdapter extends TechnicalSupabaseAdapter {
+  readonly runtime: "server";
+}
+
+export interface AdministrativeSupabaseAdapter extends TechnicalSupabaseAdapter {
+  readonly runtime: "administrative";
+}
+
+export type SupabaseInitializationResult<TAdapter extends TechnicalSupabaseAdapter> =
+  { adapter: TAdapter; ok: true } | { error: SupabaseInitializationError; ok: false };
 
 export interface SupabaseInitializationError {
   code: "SUPABASE_CONFIGURATION_INVALID" | "SUPABASE_INITIALIZATION_FAILED";

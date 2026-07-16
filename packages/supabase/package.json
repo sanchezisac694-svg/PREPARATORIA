@@ -25,12 +25,13 @@
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @preparatoria/env build && tsc --project tsconfig.build.json && node --test tests/supabase.test.mjs"
+    "test": "pnpm --filter @preparatoria/env build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/supabase.test.mjs"
   },
   "dependencies": {
     "@preparatoria/env": "workspace:*",
     "@supabase/ssr": "0.12.3",
-    "@supabase/supabase-js": "2.110.6"
+    "@supabase/supabase-js": "2.110.6",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@preparatoria/config": "workspace:*",
