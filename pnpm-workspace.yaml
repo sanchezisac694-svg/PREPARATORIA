@@ -2,6 +2,10 @@ packages:
   - "apps/*"
   - "packages/*"
 
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
+
 catalogMode: strict
 
 engineStrict: true

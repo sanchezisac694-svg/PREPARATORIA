@@ -1,0 +1,46 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f7f8fa;
+  color: #172033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  width: min(42rem, calc(100% - 2rem));
+  margin: 15vh auto 0;
+  padding: 2rem;
+  border: 1px solid #d8deea;
+  border-radius: 0.75rem;
+  background: #ffffff;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+button {
+  padding: 0.625rem 1rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: #164e63;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #0ea5e9;
+  outline-offset: 2px;
+}
+
+.technical-reference {
+  color: #526079;
+  font-size: 0.875rem;
+}
