@@ -1,6 +1,8 @@
+import { readRuntimeEnv } from "@preparatoria/env/server";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "@preparatoria/ui/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,8 +15,10 @@ type RootLayoutProps = Readonly<{
 }>;
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const environment = readRuntimeEnv();
+
   return (
-    <html lang="es">
+    <html data-app-env={environment.APP_ENV} data-log-level={environment.LOG_LEVEL} lang="es">
       <body>{children}</body>
     </html>
   );

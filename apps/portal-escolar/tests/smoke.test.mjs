@@ -8,4 +8,5 @@ test("la página provisional identifica el Portal Escolar", async () => {
   assert.match(source, /Portal Escolar/);
   assert.match(source, /Base técnica en construcción/);
   assert.match(source, /Fase 1 — Fundamentos técnicos/);
+  assert.match(source, /@preparatoria\/ui/);
 });

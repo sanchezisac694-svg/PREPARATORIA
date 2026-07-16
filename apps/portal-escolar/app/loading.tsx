@@ -1,3 +1,5 @@
+import { LoadingIndicator } from "@preparatoria/ui";
+
 export default function Loading() {
-  return <p role="status">Cargando base técnica…</p>;
+  return <LoadingIndicator label="Cargando base técnica…" />;
 }

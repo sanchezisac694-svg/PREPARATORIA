@@ -8,4 +8,5 @@ test("la página provisional identifica el Sistema Administrativo", async () => 
   assert.match(source, /Sistema Administrativo/);
   assert.match(source, /Base técnica en construcción/);
   assert.match(source, /Fase 1 — Fundamentos técnicos/);
+  assert.match(source, /@preparatoria\/ui/);
 });

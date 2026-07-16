@@ -1,11 +1,5 @@
 {
-  "extends": "../../tsconfig.json",
-  "compilerOptions": {
-    "incremental": true,
-    "jsx": "preserve",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "plugins": [{ "name": "next" }]
-  },
+  "extends": "@preparatoria/config/typescript/nextjs.json",
   "include": [
     "next-env.d.ts",
     ".next/types/**/*.ts",

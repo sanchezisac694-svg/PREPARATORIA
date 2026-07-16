@@ -1,0 +1,13 @@
+{
+  "name": "@preparatoria/config",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./typescript/base.json": "./typescript/base.json",
+    "./typescript/library.json": "./typescript/library.json",
+    "./typescript/nextjs.json": "./typescript/nextjs.json"
+  },
+  "files": [
+    "typescript"
+  ]
+}

@@ -26,6 +26,15 @@ importers:
 
   apps/portal-escolar:
     dependencies:
+      '@preparatoria/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@preparatoria/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@preparatoria/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.2.10
         version: 16.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -36,6 +45,9 @@ importers:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
     devDependencies:
+      '@preparatoria/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -48,6 +60,15 @@ importers:
 
   apps/sistema-administrativo:
     dependencies:
+      '@preparatoria/env':
+        specifier: workspace:*
+        version: link:../../packages/env
+      '@preparatoria/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@preparatoria/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: 16.2.10
         version: 16.2.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -58,6 +79,9 @@ importers:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
     devDependencies:
+      '@preparatoria/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -67,6 +91,48 @@ importers:
       '@types/react-dom':
         specifier: 19.2.3
         version: 19.2.3(@types/react@19.2.17)
+
+  packages/config: {}
+
+  packages/env:
+    dependencies:
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@preparatoria/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+
+  packages/shared:
+    devDependencies:
+      '@preparatoria/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+
+  packages/ui:
+    devDependencies:
+      '@preparatoria/config':
+        specifier: workspace:*
+        version: link:../config
+      '@types/react':
+        specifier: 19.2.17
+        version: 19.2.17
+      '@types/react-dom':
+        specifier: 19.2.3
+        version: 19.2.3(@types/react@19.2.17)
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: 19.2.7
+        version: 19.2.7(react@19.2.7)
 
 packages:
 
@@ -802,6 +868,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
 
   '@emnapi/runtime@1.11.2':
@@ -1457,3 +1526,5 @@ snapshots:
   word-wrap@1.2.5: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@4.4.3: {}
