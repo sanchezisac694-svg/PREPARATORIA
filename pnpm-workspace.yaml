@@ -12,6 +12,14 @@ engineStrict: true
 
 linkWorkspacePackages: false
 
+minimumReleaseAgeExclude:
+  - "@supabase/auth-js@2.110.6"
+  - "@supabase/functions-js@2.110.6"
+  - "@supabase/postgrest-js@2.110.6"
+  - "@supabase/realtime-js@2.110.6"
+  - "@supabase/storage-js@2.110.6"
+  - "@supabase/supabase-js@2.110.6"
+
 saveExact: true
 
 sharedWorkspaceLockfile: true

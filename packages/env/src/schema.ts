@@ -10,6 +10,23 @@ export const publicEnvSchema = z
   })
   .strict();
 
+const supabasePublishableKeySchema = z
+  .string()
+  .min(1, "La clave publicable es obligatoria.")
+  .regex(/^sb_publishable_[A-Za-z0-9_-]+$/, "Debe ser una clave publicable de Supabase.");
+
+export const supabasePublicEnvSchema = z
+  .object({
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabasePublishableKeySchema,
+    NEXT_PUBLIC_SUPABASE_URL: z
+      .url()
+      .refine(
+        (value) => value.startsWith("https://") || value.startsWith("http://localhost"),
+        "Debe usar HTTPS o localhost.",
+      ),
+  })
+  .strict();
+
 export const serverEnvSchema = publicEnvSchema
   .extend({
     ADMIN_BASE_URL: z.url(),
@@ -27,6 +44,7 @@ export const runtimeEnvSchema = z
   .strict();
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>;
+export type SupabasePublicEnv = z.infer<typeof supabasePublicEnvSchema>;
 export type RuntimeEnv = z.infer<typeof runtimeEnvSchema>;
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 

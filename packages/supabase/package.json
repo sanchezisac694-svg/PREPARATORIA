@@ -1,0 +1,39 @@
+{
+  "name": "@preparatoria/supabase",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./admin-contract": {
+      "types": "./src/admin-contract.ts",
+      "default": "./dist/admin-contract.js"
+    },
+    "./browser": {
+      "types": "./src/browser.ts",
+      "default": "./dist/browser.js"
+    },
+    "./ssr": {
+      "types": "./src/ssr.ts",
+      "default": "./dist/ssr.js"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm --filter @preparatoria/env build && tsc --project tsconfig.build.json && node --test tests/supabase.test.mjs"
+  },
+  "dependencies": {
+    "@preparatoria/env": "workspace:*",
+    "@supabase/ssr": "0.12.3",
+    "@supabase/supabase-js": "2.110.6"
+  },
+  "devDependencies": {
+    "@preparatoria/config": "workspace:*",
+    "@types/node": "24.13.3"
+  }
+}

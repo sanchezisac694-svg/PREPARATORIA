@@ -1,4 +1,5 @@
 import type { RuntimeEnv, ServerEnv } from "./schema.js";
+import { parseSupabasePublicEnv } from "./client.js";
 import { formatEnvError, runtimeEnvSchema, serverEnvSchema } from "./schema.js";
 
 if (typeof window !== "undefined") {
@@ -30,4 +31,11 @@ export function readRuntimeEnv(source: NodeJS.ProcessEnv = process.env): Runtime
   }
 
   return result.data;
+}
+
+export function readSupabasePublicEnv(source: NodeJS.ProcessEnv = process.env) {
+  return parseSupabasePublicEnv({
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: source.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_SUPABASE_URL: source.NEXT_PUBLIC_SUPABASE_URL,
+  });
 }
