@@ -1,0 +1,28 @@
+{
+  "name": "@preparatoria/portal-escolar",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/smoke.test.mjs"
+  },
+  "dependencies": {
+    "@preparatoria/env": "workspace:*",
+    "@preparatoria/shared": "workspace:*",
+    "@preparatoria/supabase": "workspace:*",
+    "@preparatoria/ui": "workspace:*",
+    "next": "16.2.10",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@preparatoria/config": "workspace:*",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3"
+  }
+}

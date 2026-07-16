@@ -1,14 +1,44 @@
-# Sistema Integral de Gesti髇 Escolar
+# Sistema Integral de Gesti贸n Escolar
 
-Proyecto para una preparatoria de un solo plantel.
+Monorepo para el sistema de una preparatoria de un solo plantel.
 
 ## Estado actual
 
-Fase 0: validaci髇 funcional y preparaci髇.
+- Fase 0: aprobada con observaciones.
+- Fase 1, Bloque 1: configuraci贸n ra铆z del monorepo.
+- Aplicaciones y m贸dulos escolares: todav铆a no implementados.
 
-## Estructura
+## Requisitos t茅cnicos
 
-- apps: aplicaciones del sistema
-- docs: documentaci髇 funcional y t閏nica
-- packages: c骴igo compartido
-- supabase: migraciones, funciones y configuraci髇
+- Node.js `24.18.0` LTS.
+- pnpm `11.13.0` mediante Corepack.
+
+## Comandos iniciales
+
+```bash
+pnpm install --frozen-lockfile
+pnpm dev
+pnpm build
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm format
+pnpm format:check
+```
+
+Mientras no existan aplicaciones o paquetes implementados, los comandos orquestados por Turborepo
+terminar谩n correctamente e informar谩n que no existen tareas aplicables.
+
+## Estructura preservada
+
+- `apps/`: aplicaciones futuras.
+- `docs/`: documentaci贸n funcional y t茅cnica.
+- `packages/`: c贸digo compartido futuro.
+- `supabase/`: configuraci贸n y cambios de datos futuros; permanece sin configuraci贸n real en este bloque.
+
+## Reglas del Bloque 1
+
+- Las versiones se fijan de forma exacta en `package.json` y `pnpm-lock.yaml`.
+- No se utilizan etiquetas flotantes o versiones preview.
+- `.env.example` contiene 煤nicamente nombres de variables, nunca secretos reales.
+- No existen aplicaciones, clientes Supabase, tablas, migraciones, RLS ni m贸dulos escolares.

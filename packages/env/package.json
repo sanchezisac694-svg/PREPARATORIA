@@ -1,0 +1,29 @@
+{
+  "name": "@preparatoria/env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./dist/client.js"
+    },
+    "./server": {
+      "types": "./src/server.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --project tsconfig.build.json && node --test tests/env.test.mjs"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@preparatoria/config": "workspace:*",
+    "@types/node": "24.13.3"
+  }
+}
