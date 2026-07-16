@@ -6,6 +6,9 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
 
+catalog:
+  supabase: 2.109.1
+
 catalogMode: strict
 
 engineStrict: true

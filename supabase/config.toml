@@ -1,0 +1,63 @@
+# Configuración exclusiva para desarrollo local.
+# No contiene referencias remotas, credenciales ni conexiones externas.
+project_id = "sistema-preparatoria-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.migrations]
+enabled = true
+schema_paths = []
+
+[db.seed]
+enabled = false
+sql_paths = []
+
+[db.network_restrictions]
+enabled = true
+allowed_cidrs = ["127.0.0.1/32"]
+allowed_cidrs_v6 = ["::1/128"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+[local_smtp]
+enabled = false
+
+[storage]
+enabled = false
+
+[storage.s3_protocol]
+enabled = false
+
+[storage.analytics]
+enabled = false
+
+[storage.vector]
+enabled = false
+
+[auth]
+enabled = false
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = []
+enable_signup = false
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false
