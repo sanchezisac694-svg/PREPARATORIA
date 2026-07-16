@@ -396,13 +396,16 @@ test("los identificadores nominales no son asignables entre sí", async () => {
       writeFile(
         fixturePath,
         [
-          'import type { AuthUserId, PersonId, ProfileId } from "@preparatoria/authz";',
+          'import type { AccountId, AuthUserId, PersonId, ProfileId } from "@preparatoria/authz";',
+          "declare const accountId: AccountId;",
           "declare const authUserId: AuthUserId;",
           "declare const personId: PersonId;",
           "declare const profileId: ProfileId;",
+          "const personFromAccount: PersonId = accountId;",
           "const personFromAuth: PersonId = authUserId;",
           "const profileFromPerson: ProfileId = personId;",
           "const authFromProfile: AuthUserId = profileId;",
+          "void personFromAccount;",
           "void personFromAuth;",
           "void profileFromPerson;",
           "void authFromProfile;",
@@ -443,7 +446,8 @@ test("los identificadores nominales no son asignables entre sí", async () => {
       output,
       /Cannot find module|Unknown compiler option|error TS5083|SyntaxError/i,
     );
-    assert.equal(output.match(/error TS2322/g)?.length, 3);
+    assert.equal(output.match(/error TS2322/g)?.length, 4);
+    assert.match(output, /AccountId.*not assignable.*PersonId/is);
     assert.match(output, /AuthUserId.*not assignable.*PersonId/is);
     assert.match(output, /PersonId.*not assignable.*ProfileId/is);
     assert.match(output, /ProfileId.*not assignable.*AuthUserId/is);

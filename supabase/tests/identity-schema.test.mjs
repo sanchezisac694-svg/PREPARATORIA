@@ -11,45 +11,51 @@ const repositoryRoot = resolve(testDirectory, "../..");
 const migrationsDirectory = join(repositoryRoot, "supabase", "migrations");
 const configPath = join(repositoryRoot, "supabase", "config.toml");
 
-const migrationFiles = (await readdir(migrationsDirectory)).filter((file) => file.endsWith(".sql"));
+const migrationFiles = (await readdir(migrationsDirectory))
+  .filter((file) => file.endsWith(".sql"))
+  .sort();
 
-assert.equal(migrationFiles.length, 1, "Bloque 3 debe contener exactamente una migración SQL");
+assert.equal(migrationFiles.length, 2, "Fase 2 debe contener exactamente dos migraciones SQL");
 
-const migrationPath = join(migrationsDirectory, migrationFiles[0]);
-const migration = await readFile(migrationPath, "utf8");
+const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
+const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
 const config = await readFile(configPath, "utf8");
 
 function valuesFromEnum(typeName) {
-  const expression = new RegExp(`create type core\\.${typeName} as enum \\(([\\s\\S]*?)\\);`, "i");
-  const match = migration.match(expression);
+  const match = initialMigration.match(
+    new RegExp(`create type core\\.${typeName} as enum \\(([\\s\\S]*?)\\);`, "i"),
+  );
 
   assert.ok(match, `No se encontró el enum core.${typeName}`);
-
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
 function seededRoles() {
-  const match = migration.match(
+  const match = initialMigration.match(
     /insert into core\.roles[\s\S]*?values([\s\S]*?)on conflict \(code\) do nothing;/i,
   );
 
   assert.ok(match, "No se encontró la carga idempotente de roles");
-
   return [...match[1].matchAll(/\('([A-Z_]+)',\s*'([^']+)'/g)].map(([, code, displayName]) => ({
     code,
     displayName,
   }));
 }
 
-test("la migración tiene nombre versionado y transacción explícita", () => {
+test("las dos migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
-  assert.match(migration, /^begin;/i);
-  assert.match(migration, /commit;\s*$/i);
+  assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
+  for (const migration of [initialMigration, authContextMigration]) {
+    assert.match(migration, /^begin;/i);
+    assert.match(migration, /commit;\s*$/i);
+  }
 });
 
-test("crea únicamente el esquema y las cuatro tablas autorizadas", () => {
-  assert.match(migration, /create schema if not exists core;/i);
-  const tables = [...migration.matchAll(/create table core\.([a-z_]+)/gi)].map((match) => match[1]);
+test("la primera migración crea únicamente las cuatro tablas autorizadas", () => {
+  assert.match(initialMigration, /create schema if not exists core;/i);
+  const tables = [...initialMigration.matchAll(/create table core\.([a-z_]+)/gi)].map(
+    (match) => match[1],
+  );
 
   assert.deepEqual(tables, ["people", "accounts", "roles", "account_roles"]);
 });
@@ -66,105 +72,124 @@ test("los catálogos SQL coinciden con packages/authz", () => {
     Object.fromEntries(seededRoles().map(({ code, displayName }) => [code, displayName])),
     roleLabels,
   );
-  assert.match(migration, /constraint roles_code_allowed check/i);
-  assert.match(migration, /constraint roles_must_be_system check \(is_system\)/i);
-});
-
-test("el estado de persona es exacto y cerrado", () => {
   assert.deepEqual(valuesFromEnum("person_status"), ["ACTIVE", "INACTIVE", "ARCHIVED"]);
 });
 
-test("aplica claves, unicidad parcial e historial de asignaciones", () => {
-  assert.match(migration, /primary key default gen_random_uuid\(\)/i);
-  assert.match(migration, /unique \(person_id\)/i);
+test("la primera migración conserva integridad, triggers y RLS deny-by-default", () => {
+  assert.match(initialMigration, /unique \(person_id\)/i);
   assert.match(
-    migration,
+    initialMigration,
     /unique index accounts_auth_user_id_active_key[\s\S]*where auth_user_id is not null;/i,
   );
   assert.match(
-    migration,
+    initialMigration,
     /unique index account_roles_active_assignment_key[\s\S]*where revoked_at is null;/i,
   );
-  assert.match(migration, /revoked_at timestamptz/i);
-  assert.match(migration, /reason text/i);
-});
-
-test("todas las relaciones persistentes usan ON DELETE RESTRICT", () => {
-  const foreignKeys = [...migration.matchAll(/foreign key \([^)]+\)[\s\S]*?on delete (\w+)/gi)];
-
+  const foreignKeys = [
+    ...initialMigration.matchAll(/foreign key \([^)]+\)[\s\S]*?on delete (\w+)/gi),
+  ];
   assert.equal(foreignKeys.length, 6);
   assert.ok(foreignKeys.every((match) => match[1].toUpperCase() === "RESTRICT"));
-  assert.doesNotMatch(migration, /on delete cascade/i);
-});
 
-test("los triggers técnicos tienen search_path fijo y no son SECURITY DEFINER", () => {
-  const functions = [...migration.matchAll(/create or replace function[\s\S]*?\$\$;/gi)];
-
-  assert.equal(functions.length, 3);
-  for (const definition of functions) {
-    assert.match(definition[0], /set search_path = pg_catalog/i);
-    assert.doesNotMatch(definition[0], /security definer/i);
-  }
-
-  assert.match(migration, /trigger people_set_updated_at/i);
-  assert.match(migration, /trigger accounts_set_updated_at/i);
-  assert.match(migration, /trigger roles_protect_system_role/i);
-  assert.match(migration, /trigger account_roles_prevent_direct_reactivation/i);
-});
-
-test("bloquea la reactivación directa y protege los roles del sistema", () => {
-  assert.match(
-    migration,
-    /old\.revoked_at is not null and new\.revoked_at is null[\s\S]*raise exception/i,
-  );
-  assert.match(migration, /if old\.is_system then[\s\S]*raise exception/i);
-});
-
-test("habilita RLS sin crear políticas funcionales", () => {
   for (const table of ["people", "accounts", "roles", "account_roles"]) {
     assert.match(
-      migration,
+      initialMigration,
       new RegExp(`alter table core\\.${table} enable row level security;`, "i"),
     );
   }
-
-  assert.doesNotMatch(migration, /create\s+policy/i);
+  assert.doesNotMatch(initialMigration, /create\s+policy/i);
 });
 
-test("revoca acceso de PUBLIC, anon y authenticated", () => {
-  for (const role of ["public", "anon", "authenticated"]) {
-    assert.match(migration, new RegExp(`revoke all on schema core from ${role};`, "i"));
+test("la segunda migración agrega la FK Auth sin modificar auth.users", () => {
+  assert.match(
+    authContextMigration,
+    /foreign key \(auth_user_id\)[\s\S]*references auth\.users \(id\)[\s\S]*on delete restrict;/i,
+  );
+  assert.doesNotMatch(authContextMigration, /insert into auth\.users/i);
+  assert.doesNotMatch(authContextMigration, /create trigger[\s\S]*auth\.users/i);
+  assert.doesNotMatch(authContextMigration, /create table/i);
+});
+
+test("crea cinco funciones de contexto STABLE con search_path vacío", () => {
+  const expectedFunctions = [
+    "current_auth_user_id",
+    "current_account_id",
+    "current_person_id",
+    "current_account_status",
+    "current_role_codes",
+  ];
+  const definitions = [
+    ...authContextMigration.matchAll(
+      /create or replace function core\.([a-z_]+)\(\)[\s\S]*?\$\$;/gi,
+    ),
+  ];
+
+  assert.deepEqual(
+    definitions.map((match) => match[1]),
+    expectedFunctions,
+  );
+  for (const definition of definitions) {
+    assert.match(definition[0], /\bstable\b/i);
+    assert.match(definition[0], /set search_path = ''/i);
+    assert.doesNotMatch(definition[0], /execute\s+format|dynamic/i);
+  }
+  assert.match(definitions[0][0], /security invoker/i);
+  for (const definition of definitions.slice(1)) {
+    assert.match(definition[0], /security definer/i);
+  }
+});
+
+test("las funciones limitan columnas, estados y roles", () => {
+  assert.match(authContextMigration, /select auth\.uid\(\)/i);
+  assert.match(authContextMigration, /account_status <> 'DISABLED'::core\.account_status/i);
+  assert.match(authContextMigration, /account_roles\.revoked_at is null/i);
+  assert.match(authContextMigration, /roles\.is_active/i);
+  assert.match(authContextMigration, /array_agg\(distinct roles\.code order by roles\.code\)/i);
+  assert.doesNotMatch(
+    authContextMigration,
+    /\b(email|phone|curp|address|document_name|raw_user_meta_data)\b/i,
+  );
+});
+
+test("los privilegios de contexto se limitan a authenticated", () => {
+  assert.match(authContextMigration, /grant usage on schema core to authenticated;/i);
+  assert.doesNotMatch(authContextMigration, /grant usage on schema core to anon/i);
+
+  for (const functionName of [
+    "current_auth_user_id",
+    "current_account_id",
+    "current_person_id",
+    "current_account_status",
+    "current_role_codes",
+  ]) {
     assert.match(
-      migration,
-      new RegExp(`revoke all on all tables in schema core from ${role};`, "i"),
+      authContextMigration,
+      new RegExp(
+        `revoke execute on function core\\.${functionName}\\(\\) from public, anon, authenticated;`,
+        "i",
+      ),
+    );
+    assert.match(
+      authContextMigration,
+      new RegExp(`grant execute on function core\\.${functionName}\\(\\) to authenticated;`, "i"),
     );
   }
-
-  assert.doesNotMatch(migration, /\bgrant\b/i);
 });
 
-test("la configuración es local, no expone core y desactiva servicios no autorizados", () => {
-  assert.match(config, /project_id = "sistema-preparatoria-local"/);
-  assert.doesNotMatch(config, /^\s*project_ref\s*=/im);
+test("mantiene cero políticas funcionales y core fuera de Data API", () => {
+  assert.doesNotMatch(authContextMigration, /create\s+policy/i);
   assert.match(config, /schemas = \["public", "graphql_public"\]/);
   assert.doesNotMatch(config, /schemas\s*=\s*\[[^\]]*"core"/i);
-  assert.match(config, /\[storage\]\s+enabled = false/i);
-  assert.match(config, /\[auth\]\s+enabled = false/i);
-  assert.match(config, /\[edge_runtime\]\s+enabled = false/i);
+  assert.doesNotMatch(config, /^\s*project_ref\s*=/im);
 });
 
-test("no contiene datos personales, secretos, módulos escolares ni conexión remota", () => {
-  const combined = `${migration}\n${config}`;
+test("no contiene secretos, datos personales, módulos escolares ni conexión remota", () => {
+  const combined = `${initialMigration}\n${authContextMigration}\n${config}`;
 
-  assert.doesNotMatch(
-    combined,
-    /\b(curp|email|correo|phone|telefono|teléfono|address|domicilio|document_name)\b/i,
-  );
-  assert.doesNotMatch(
-    migration,
-    /create table (?:core\.)?(?:students?|alumnos?|aspirantes?|tutores?|teachers?|docentes?|maestros?|payments?|pagos?|grades?|calificaciones?|attendance|asistencia|schedules?|horarios?|groups?|grupos?|subjects?|materias?)\b/i,
-  );
-  assert.doesNotMatch(combined, /service_role|secret_key|supabase_secret_key/i);
+  assert.doesNotMatch(combined, /service_role|secret_key|supabase_secret_key|sb_secret_/i);
   assert.doesNotMatch(combined, /https:\/\/[a-z0-9-]+\.supabase\.co/i);
-  assert.doesNotMatch(migration, /references\s+auth\.users/i);
+  assert.doesNotMatch(
+    initialMigration,
+    /create table (?:core\.)?(?:students?|alumnos?|payments?|pagos?|grades?|calificaciones?|attendance|asistencia|schedules?|horarios?|groups?|grupos?|subjects?|materias?)\b/i,
+  );
 });

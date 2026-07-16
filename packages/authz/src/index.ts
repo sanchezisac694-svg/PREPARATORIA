@@ -36,6 +36,8 @@ export type {
   AccessDecision,
   AccessDenialReason,
   AccessReason,
+  AccountId,
+  AuthIdentityContext,
   AuthorizationContext,
   AuthUserId,
   InstitutionalIdentity,
