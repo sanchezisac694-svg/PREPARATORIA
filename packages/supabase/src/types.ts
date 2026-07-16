@@ -21,7 +21,7 @@ export interface CookieValue {
 
 export interface SsrCookieAdapter {
   getAll(): CookieValue[] | Promise<CookieValue[]>;
-  setAll(cookies: CookieValue[]): void | Promise<void>;
+  setAll(cookies: CookieValue[], headers: Record<string, string>): void | Promise<void>;
 }
 
 export interface TechnicalSupabaseAdapter {

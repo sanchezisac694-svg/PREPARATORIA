@@ -15,6 +15,11 @@ import {
   manageInstitutionalAccountLifecycle,
   safeAccountLifecycleDiagnostic,
 } from "../dist/account-lifecycle.js";
+import {
+  createAuthenticationService,
+  evaluateApplicationAccess,
+  safeInternalRedirect,
+} from "../dist/auth-session.js";
 import { createSupabaseBrowserClient } from "../dist/browser.js";
 import {
   ProvisioningError,
@@ -91,6 +96,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
 
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
+    "auth-session.js",
     "admin-contract.js",
     "browser.js",
     "config.js",
@@ -343,8 +349,18 @@ test("account-lifecycle falla al importarse desde un Client Component", async ()
   await expectClientBuildFailure("account-lifecycle");
 });
 
+test("auth-session falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("auth-session");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
-  for (const moduleName of ["ssr", "admin-contract", "provisioning", "account-lifecycle"]) {
+  for (const moduleName of [
+    "ssr",
+    "admin-contract",
+    "provisioning",
+    "account-lifecycle",
+    "auth-session",
+  ]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
       process.execPath,
@@ -380,6 +396,208 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
   assert.doesNotMatch(source, /service_role/i);
   assert.doesNotMatch(source, /SUPABASE_SECRET_KEY/);
   assert.doesNotMatch(source, /process\.env/);
+
+  const authSessionSource = await readFile(
+    new URL("../src/auth-session.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(authSessionSource, /SupabaseClient|service_role|process\.env/);
+  assert.doesNotMatch(authSessionSource, /\.(?:from|channel)\s*\(/);
+});
+
+function fakeAuthService({ context, signInError = false, user = { id: "auth-user" } } = {}) {
+  let signOutCalls = 0;
+  let claimsCalls = 0;
+  let factoryCalls = 0;
+  const service = createAuthenticationService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    (_url, _key, options) => {
+      factoryCalls += 1;
+      return {
+        auth: {
+          async getClaims() {
+            claimsCalls += 1;
+            await options.cookies.setAll(
+              [
+                {
+                  name: "synthetic-cookie",
+                  options: { httpOnly: false, path: "/", sameSite: "lax" },
+                  value: "not-a-token",
+                },
+              ],
+              { "Cache-Control": "private, no-store", Expires: "0", Pragma: "no-cache" },
+            );
+            return {
+              data: { claims: user ? { sub: user.id } : null },
+              error: user ? null : new Error("expired"),
+            };
+          },
+          async signInWithPassword() {
+            return { data: {}, error: signInError ? new Error("invalid") : null };
+          },
+          async signOut() {
+            signOutCalls += 1;
+            return { error: null };
+          },
+        },
+        async rpc() {
+          return { data: context ? [context] : [], error: null };
+        },
+      };
+    },
+  );
+  return {
+    claimsCalls: () => claimsCalls,
+    factoryCalls: () => factoryCalls,
+    service,
+    signOutCalls: () => signOutCalls,
+  };
+}
+
+test("getClaims valida cada solicitud y setAll conserva cookies, opciones y headers", async () => {
+  const updates = [];
+  const secureOptions = [];
+  let factoryCalls = 0;
+  function createService() {
+    return createAuthenticationService(
+      validConfig,
+      {
+        getAll: () => [],
+        setAll: (cookies, headers) => updates.push({ cookies, headers }),
+      },
+      (_url, _key, options) => {
+        factoryCalls += 1;
+        secureOptions.push(options.cookieOptions.secure);
+        return {
+          auth: {
+            async getClaims() {
+              await options.cookies.setAll(
+                [{ name: "session", options: { path: "/", sameSite: "lax" }, value: "hidden" }],
+                { "Cache-Control": "private, no-store", Expires: "0", Pragma: "no-cache" },
+              );
+              return { data: { claims: { sub: "auth-user" } }, error: null };
+            },
+            async signInWithPassword() {
+              return { data: {}, error: null };
+            },
+            async signOut() {
+              return { error: null };
+            },
+          },
+          async rpc() {
+            return { data: [], error: null };
+          },
+        };
+      },
+    );
+  }
+  await createService().refreshSession();
+  await createService().refreshSession();
+  assert.equal(factoryCalls, 2, "cada solicitud debe crear un cliente nuevo");
+  assert.deepEqual(secureOptions, [true, true], "HTTPS debe fijar cookies Secure");
+  assert.equal(updates.length, 2);
+  assert.deepEqual(updates[0].cookies[0].options, { path: "/", sameSite: "lax" });
+  assert.deepEqual(updates[0].headers, {
+    "Cache-Control": "private, no-store",
+    Expires: "0",
+    Pragma: "no-cache",
+  });
+});
+
+test("SSR permite localhost sin Secure y exige Secure para HTTPS", () => {
+  let localSecure;
+  createAuthenticationService(
+    { publishableKey: validConfig.publishableKey, url: "http://localhost:54321" },
+    { getAll: () => [], setAll: () => undefined },
+    (_url, _key, options) => {
+      localSecure = options.cookieOptions.secure;
+      return {
+        auth: {
+          async getClaims() {
+            return { data: null, error: null };
+          },
+          async signInWithPassword() {
+            return { data: {}, error: null };
+          },
+          async signOut() {
+            return { error: null };
+          },
+        },
+        async rpc() {
+          return { data: [], error: null };
+        },
+      };
+    },
+  );
+  assert.equal(localSecure, false);
+});
+
+test("autentica, evalúa estados y no devuelve tokens", async () => {
+  const active = {
+    account_id: "account",
+    account_status: "ACTIVE",
+    allowed_applications: ["PORTAL_ESCOLAR"],
+    auth_user_id: "auth-user",
+    person_id: "person",
+    role_codes: ["ALUMNO"],
+  };
+  const { service } = fakeAuthService({ context: active });
+  const result = await service.signInWithInstitutionalCredentials({
+    email: "local@example.invalid",
+    password: "synthetic-password",
+  });
+  assert.equal(result.ok, true);
+  assert.doesNotMatch(JSON.stringify(result), /access_token|refresh_token|synthetic-password/);
+  assert.deepEqual(evaluateApplicationAccess(result.identity.context, "PORTAL_ESCOLAR"), {
+    allowed: true,
+    state: "ACTIVE",
+  });
+  assert.deepEqual(evaluateApplicationAccess(result.identity.context, "SISTEMA_ADMINISTRATIVO"), {
+    allowed: false,
+    state: "APPLICATION_NOT_ALLOWED",
+  });
+  for (const status of [
+    "PENDING_INVITATION",
+    "PENDING_ACTIVATION",
+    "SUSPENDED",
+    "BLOCKED",
+    "DISABLED",
+  ]) {
+    assert.deepEqual(
+      evaluateApplicationAccess(
+        { ...result.identity.context, accountStatus: status },
+        "PORTAL_ESCOLAR",
+      ),
+      { allowed: false, state: status },
+    );
+  }
+});
+
+test("maneja credenciales inválidas, sesión ausente y logout idempotente", async () => {
+  const invalid = fakeAuthService({ signInError: true });
+  assert.deepEqual(
+    await invalid.service.signInWithInstitutionalCredentials({
+      email: "x@example.invalid",
+      password: "incorrect-value",
+    }),
+    { error: "INVALID_CREDENTIALS", ok: false },
+  );
+  const absent = fakeAuthService({ user: null });
+  assert.deepEqual(await absent.service.getAuthenticatedIdentity(), {
+    error: "SESSION_EXPIRED",
+    ok: false,
+  });
+  const logout = fakeAuthService();
+  assert.deepEqual(await logout.service.signOutCurrentSession(), { ok: true });
+  assert.deepEqual(await logout.service.signOutCurrentSession(), { ok: true });
+  assert.equal(logout.signOutCalls(), 2);
+});
+
+test("solo permite redirects internos cerrados", () => {
+  assert.equal(safeInternalRedirect("/inicio"), "/inicio");
+  assert.equal(safeInternalRedirect("https://evil.invalid"), "/dashboard");
+  assert.equal(safeInternalRedirect("//evil.invalid"), "/dashboard");
 });
 
 const provisioningCommand = {

@@ -1,6 +1,6 @@
 begin;
 
-select plan(10);
+select plan(13);
 savepoint data_changes;
 
 insert into auth.users (
@@ -347,6 +347,26 @@ $pgtap$,
 
 select lives_ok(
   $pgtap$
+do $gateway_isolation$
+declare
+  context record;
+begin
+  select * into context from public.get_current_identity_context();
+  if context.auth_user_id <> '51000000-0000-0000-0000-000000000003'
+    or context.account_id <> '53000000-0000-0000-0000-000000000003'
+    or context.person_id <> '52000000-0000-0000-0000-000000000003'
+    or context.account_id = '53000000-0000-0000-0000-000000000004' then
+    raise exception 'FAIL public gateway isolation';
+  end if;
+  raise notice 'PASS public gateway returns only auth.uid context';
+end;
+$gateway_isolation$;
+$pgtap$,
+  'el gateway público devuelve únicamente el contexto de auth.uid()'
+);
+
+select lives_ok(
+  $pgtap$
 do $direct_access$
 begin
   begin
@@ -379,6 +399,13 @@ $pgtap$,
 reset role;
 set local role anon;
 
+select throws_ok(
+  'select * from public.get_current_identity_context()',
+  '42501',
+  null,
+  'anon no puede ejecutar el gateway público'
+);
+
 select lives_ok(
   $pgtap$
 do $anon_denied$
@@ -396,6 +423,46 @@ $pgtap$,
 );
 
 reset role;
+
+select lives_ok(
+  $pgtap$
+do $gateway_metadata$
+declare
+  function_oid oid;
+begin
+  select p.oid
+  into function_oid
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'get_current_identity_context'
+    and p.pronargs = 0;
+
+  if function_oid is null
+    or has_function_privilege('public', function_oid, 'EXECUTE')
+    or has_function_privilege('anon', function_oid, 'EXECUTE')
+    or not has_function_privilege('authenticated', function_oid, 'EXECUTE') then
+    raise exception 'FAIL public gateway grants or signature';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_proc p
+    where p.oid = function_oid
+      and not p.prosecdef
+      and p.provolatile = 's'
+      and p.proowner = (select oid from pg_roles where rolname = 'postgres')
+      and p.proconfig @> array['search_path=""']
+  ) then
+    raise exception 'FAIL public gateway security metadata';
+  end if;
+
+  raise notice 'PASS gateway has zero arguments, SECURITY INVOKER and minimal grants';
+end;
+$gateway_metadata$;
+$pgtap$,
+  'el gateway tiene firma sin parámetros, SECURITY INVOKER y grants mínimos'
+);
 
 select lives_ok(
   $pgtap$
@@ -494,6 +561,7 @@ $pgtap$,
 
 savepoint reversal;
 
+drop function public.get_current_identity_context();
 revoke execute on function core.get_current_identity_context() from authenticated;
 drop function core.get_current_identity_context();
 drop policy accounts_select_own_active_context on core.accounts;

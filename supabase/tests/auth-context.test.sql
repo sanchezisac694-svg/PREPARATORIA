@@ -366,6 +366,7 @@ $pgtap$,
 
 savepoint reversal;
 
+drop function public.get_current_identity_context();
 revoke execute on function core.current_auth_user_id() from authenticated;
 revoke execute on function core.current_account_id() from authenticated;
 revoke execute on function core.current_person_id() from authenticated;

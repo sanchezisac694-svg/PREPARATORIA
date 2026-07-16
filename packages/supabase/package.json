@@ -16,6 +16,10 @@
       "types": "./src/account-lifecycle.ts",
       "default": "./dist/account-lifecycle.js"
     },
+    "./auth-session": {
+      "types": "./src/auth-session.ts",
+      "default": "./dist/auth-session.js"
+    },
     "./provisioning": {
       "types": "./src/provisioning.ts",
       "default": "./dist/provisioning.js"

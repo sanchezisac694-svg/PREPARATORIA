@@ -35,6 +35,9 @@ importers:
 
   apps/portal-escolar:
     dependencies:
+      '@preparatoria/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
       '@preparatoria/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -72,6 +75,9 @@ importers:
 
   apps/sistema-administrativo:
     dependencies:
+      '@preparatoria/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
       '@preparatoria/env':
         specifier: workspace:*
         version: link:../../packages/env

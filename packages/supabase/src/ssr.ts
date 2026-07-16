@@ -12,7 +12,7 @@ if (typeof window !== "undefined") {
 export type SsrClientFactory = (
   url: string,
   publishableKey: string,
-  options: { cookies: SsrCookieAdapter },
+  options: { cookieOptions: { secure: boolean }; cookies: SsrCookieAdapter },
 ) => unknown;
 
 class LimitedSsrSupabaseAdapter implements SsrSupabaseAdapter {
@@ -34,7 +34,10 @@ export function createSupabaseSsrClient(
   factory: SsrClientFactory = createServerClient,
 ): SsrSupabaseAdapter {
   const validated = validateSupabasePublicConfig(config);
-  const sdkClient = factory(validated.url, validated.publishableKey, { cookies });
+  const sdkClient = factory(validated.url, validated.publishableKey, {
+    cookieOptions: { secure: validated.url.startsWith("https://") },
+    cookies,
+  });
   return new LimitedSsrSupabaseAdapter(sdkClient);
 }
 
