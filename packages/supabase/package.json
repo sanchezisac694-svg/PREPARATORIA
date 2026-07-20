@@ -32,6 +32,10 @@
       "types": "./src/provisioning.ts",
       "default": "./dist/provisioning.js"
     },
+    "./session-security": {
+      "types": "./src/session-security.ts",
+      "default": "./dist/session-security.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"

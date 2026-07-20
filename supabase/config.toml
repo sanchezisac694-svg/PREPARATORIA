@@ -56,6 +56,10 @@ enable_signup = false
 enable_anonymous_sign_ins = false
 enable_manual_linking = false
 
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/public/custom_access_token_hook"
+
 [edge_runtime]
 enabled = false
 

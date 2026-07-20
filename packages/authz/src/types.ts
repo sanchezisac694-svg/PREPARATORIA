@@ -20,6 +20,7 @@ export interface AuthIdentityContext {
   readonly authUserId: AuthUserId | null;
   readonly personId: PersonId | null;
   readonly roleCodes: readonly Role[];
+  readonly sessionValid: boolean;
 }
 
 export interface InstitutionalIdentity {

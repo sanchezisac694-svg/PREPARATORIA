@@ -22,8 +22,8 @@ if (!apiUrl || !publishableKey || !serviceKey || !databaseContainer) {
   throw new Error("Falta configuración sintética local para la prueba.");
 }
 const parsedApiUrl = new URL(apiUrl);
-if (parsedApiUrl.hostname !== "localhost" || parsedApiUrl.port !== "54321") {
-  throw new Error("La prueba solo admite Supabase local en localhost:54321.");
+if (!["localhost", "127.0.0.1"].includes(parsedApiUrl.hostname) || parsedApiUrl.port !== "54321") {
+  throw new Error("La prueba solo admite Supabase local en loopback:54321.");
 }
 
 function database(sql, capture = false) {
@@ -238,7 +238,12 @@ try {
   const blocked = fixtures.find((fixture) => fixture.key === "blocked");
   const disabled = fixtures.find((fixture) => fixture.key === "disabled");
 
-  assert.equal((await institutionalLogin(student, applications.PORTAL_ESCOLAR)).ok, true);
+  const initialStudentLogin = await institutionalLogin(student, applications.PORTAL_ESCOLAR);
+  assert.equal(
+    initialStudentLogin.ok,
+    true,
+    initialStudentLogin.ok ? undefined : initialStudentLogin.error,
+  );
   assert.deepEqual(await institutionalLogin(student, applications.SISTEMA_ADMINISTRATIVO), {
     error: "APPLICATION_NOT_ALLOWED",
     ok: false,
@@ -345,6 +350,66 @@ try {
     ok: false,
   });
 
+  const sessionA = createSessionAuthentication();
+  const sessionB = createSessionAuthentication();
+  const multiSessionCommand = {
+    aliasDomain,
+    application: applications.PORTAL_ESCOLAR,
+    attemptSalt,
+    identifier: student.identifier,
+    identifierType: student.identifierType,
+    ipAddress: "127.0.0.3",
+    nip: student.nip,
+  };
+  assert.equal(
+    (
+      await signInWithInstitutionalCredentials(multiSessionCommand, {
+        attempts,
+        authentication: sessionA,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal(
+    (
+      await signInWithInstitutionalCredentials(multiSessionCommand, {
+        attempts,
+        authentication: sessionB,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal((await sessionA.getVerifiedClaims()).ok, true);
+  assert.equal((await sessionB.getVerifiedClaims()).ok, true);
+  const invalidation = await sessionA.invalidateOwnSessions({
+    correlationId: randomUUID(),
+    eventType: "GLOBAL_SESSION_REVOCATION_REQUESTED",
+    idempotencyKey: `multisession:${randomUUID()}`,
+    reason: "USER_LOGOUT_ALL",
+  });
+  assert.equal(invalidation.ok, true);
+  assert.equal((await sessionA.getVerifiedClaims()).ok, true);
+  assert.equal((await sessionB.getVerifiedClaims()).ok, true);
+  assert.deepEqual(await sessionA.getAuthenticatedIdentity(), {
+    error: "SESSION_VERSION_MISMATCH",
+    ok: false,
+  });
+  assert.deepEqual(await sessionB.getAuthenticatedIdentity(), {
+    error: "SESSION_VERSION_MISMATCH",
+    ok: false,
+  });
+  assert.deepEqual(await sessionA.revokeAllSessions(), { ok: true });
+  const sessionC = createSessionAuthentication();
+  assert.equal(
+    (
+      await signInWithInstitutionalCredentials(multiSessionCommand, {
+        attempts,
+        authentication: sessionC,
+      })
+    ).ok,
+    true,
+  );
+
   console.log(
     JSON.stringify(
       {
@@ -357,6 +422,7 @@ try {
         institutionalLogin: "PASS",
         leadingZeroNip: "PASS",
         logout: "PASS",
+        multiSessionInvalidation: "PASS",
         refresh: "PASS",
         repeatedAttempts: "PASS",
       },
@@ -369,6 +435,11 @@ try {
   const personIds = [...fixtures.map((fixture) => fixture.personId), applicant.personId];
   try {
     database(`
+      set session_replication_role = replica;
+      delete from core.account_session_security_events where account_id = any (array[
+        ${accountIds.map((id) => `'${id}'::uuid`).join(",")}
+      ]);
+      set session_replication_role = origin;
       delete from core.account_roles where account_id = any (array[
         ${accountIds.map((id) => `'${id}'::uuid`).join(",")}
       ]);

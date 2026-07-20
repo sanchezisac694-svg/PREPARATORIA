@@ -53,6 +53,12 @@ import {
   safeProvisioningDiagnostic,
 } from "../dist/provisioning.js";
 import { createSupabaseSsrClient } from "../dist/ssr.js";
+import {
+  invalidateInstitutionalSessions,
+  parseInstitutionalSessionVersionClaim,
+  parseVerifiedInstitutionalClaims,
+  sessionSecurityErrorCodes,
+} from "../dist/session-security.js";
 
 const validConfig = {
   publishableKey: "sb_publishable_example123",
@@ -128,6 +134,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "browser.js",
     "config.js",
     "provisioning.js",
+    "session-security.js",
     "ssr.js",
     "types.js",
   ];
@@ -345,6 +352,60 @@ test("rechaza URL inválida, clave faltante y claves no publicables", () => {
   );
 });
 
+test("parser session_version accepts only positive safe integers", () => {
+  assert.equal(parseInstitutionalSessionVersionClaim(1), 1n);
+  assert.equal(parseInstitutionalSessionVersionClaim(Number.MAX_SAFE_INTEGER), 9007199254740991n);
+  for (const value of [undefined, null, 0, -1, 1.5, "1", "invalid", {}, [], true, 1n]) {
+    assert.throws(
+      () => parseInstitutionalSessionVersionClaim(value),
+      (error) => sessionSecurityErrorCodes.includes(error.code),
+    );
+  }
+  assert.deepEqual(
+    parseVerifiedInstitutionalClaims({
+      session_id: "00000000-0000-4000-8000-000000000001",
+      session_version: 2,
+      sub: "00000000-0000-4000-8000-000000000002",
+    }),
+    {
+      sessionId: "00000000-0000-4000-8000-000000000001",
+      sessionVersion: 2n,
+      sub: "00000000-0000-4000-8000-000000000002",
+    },
+  );
+});
+
+test("session coordinator invalidates first and fails closed when Auth fails", async () => {
+  const calls = [];
+  const result = await invalidateInstitutionalSessions(
+    {
+      authScope: "global",
+      correlationId: "00000000-0000-4000-8000-000000000003",
+      eventType: "GLOBAL_SESSION_REVOCATION_REQUESTED",
+      idempotencyKey: "session:synthetic:0001",
+      reason: "USER_LOGOUT_ALL",
+    },
+    {
+      auth: {
+        revokeAllSessions: async () => {
+          calls.push("auth");
+          return { ok: false };
+        },
+        revokeOtherSessions: async () => ({ ok: true }),
+      },
+      persistence: {
+        invalidate: async () => {
+          calls.push("database");
+          return { invalidated: true, ok: true };
+        },
+      },
+    },
+  );
+  assert.deepEqual(calls, ["database", "auth"]);
+  assert.deepEqual(result, { invalidated: true, revocationConfirmed: false });
+  assert.doesNotMatch(JSON.stringify(result), /access.?token|refresh.?token|cookie|jwt/i);
+});
+
 test("crea un adaptador SSR limitado con cookies simuladas y sin red", () => {
   const expectedSdkClient = { kind: "ssr-double" };
   const cookies = { getAll: () => [], setAll: () => undefined };
@@ -476,7 +537,7 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
               { "Cache-Control": "private, no-store", Expires: "0", Pragma: "no-cache" },
             );
             return {
-              data: { claims: user ? { sub: user.id } : null },
+              data: { claims: user ? { session_version: 1, sub: user.id } : null },
               error: user ? null : new Error("expired"),
             };
           },
@@ -492,7 +553,12 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
           },
         },
         async rpc() {
-          return { data: context ? [context] : [], error: null };
+          return {
+            data: context
+              ? [{ session_valid: context.account_status === "ACTIVE", ...context }]
+              : [],
+            error: null,
+          };
         },
       };
     },
@@ -1136,7 +1202,10 @@ test("cambio autenticado revalida contexto, actualiza y revoca otras sesiones", 
     {
       audit: { record: async (event) => events.push(event) },
       auth: {
-        async revokeOtherSessions() {
+        async invalidateOwnSessions() {
+          return { invalidated: true, ok: true };
+        },
+        async revokeAllSessions() {
           return { ok: true };
         },
         async updateAuthenticatedPassword(input) {
@@ -1154,6 +1223,7 @@ test("cambio autenticado revalida contexto, actualiza y revoca otras sesiones", 
               authUserId: "auth",
               personId: "person",
               roleCodes: ["ALUMNO"],
+              sessionValid: true,
             },
             userId: "auth",
           },
@@ -1163,7 +1233,7 @@ test("cambio autenticado revalida contexto, actualiza y revoca otras sesiones", 
     },
   );
   assert.deepEqual(result, { changed: true, otherSessionsRevoked: true });
-  assert.equal(events.length, 3);
+  assert.equal(events.length, 2);
   assert.deepEqual(credentials, [{ currentPassword: "001122", newPassword: "009988" }]);
   assert.doesNotMatch(JSON.stringify(result), /001122|009988|password|token|alias/i);
 });
@@ -1186,6 +1256,7 @@ test("cambio autenticado rechaza confirmación, reutilización, estado y NIP act
         authUserId: "auth",
         personId: "person",
         roleCodes: ["ALUMNO"],
+        sessionValid: true,
       },
       userId: "auth",
     },
@@ -1194,7 +1265,8 @@ test("cambio autenticado rechaza confirmación, reutilización, estado y NIP act
   const dependency = {
     audit: { record: async () => undefined },
     auth: {
-      revokeOtherSessions: async () => ({ ok: false }),
+      invalidateOwnSessions: async () => ({ invalidated: true, ok: true }),
+      revokeAllSessions: async () => ({ ok: false }),
       updateAuthenticatedPassword: async () => ({ ok: false }),
     },
     getIdentity: activeIdentity,
@@ -1223,6 +1295,7 @@ test("cambio autenticado rechaza confirmación, reutilización, estado y NIP act
             authUserId: "auth",
             personId: "person",
             roleCodes: [],
+            sessionValid: true,
           },
           userId: "auth",
         },
@@ -1243,6 +1316,10 @@ test("restablecimiento consume una sola vez y deriva reconciliación ante result
     async completeReset(input) {
       calls.push(["complete", input]);
       return { accountId: "account", id: "recovery", personId: "person", status: "CONSUMED" };
+    },
+    async invalidateSessionsAfterReset(input) {
+      calls.push(["invalidate", input]);
+      return { ok: true };
     },
     async markReconciliationRequired(input) {
       calls.push(["reconcile", input]);

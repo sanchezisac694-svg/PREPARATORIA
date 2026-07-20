@@ -194,7 +194,9 @@ function authorizeAuthenticatedIdentity(
       error:
         result.error === "AUTH_CONTEXT_UNAVAILABLE"
           ? "AUTH_CONTEXT_UNAVAILABLE"
-          : "INVALID_CREDENTIALS",
+          : result.error === "ACCOUNT_NOT_ACTIVE"
+            ? "ACCOUNT_NOT_ACTIVE"
+            : "INVALID_CREDENTIALS",
       ok: false,
     };
   }

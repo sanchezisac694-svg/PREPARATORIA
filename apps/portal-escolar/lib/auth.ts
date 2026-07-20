@@ -25,6 +25,7 @@ export async function portalAuthentication() {
 
 export async function requirePortalAccess() {
   const result = await (await portalAuthentication()).getAuthenticatedIdentity();
+  if (!result.ok && result.error === "SESSION_VERSION_MISMATCH") redirect("/sesion-expirada");
   if (!result.ok)
     redirect(result.error === "ACCOUNT_NOT_LINKED" ? "/acceso-no-disponible" : "/login");
   const decision = evaluateApplicationAccess(result.identity.context, applications.PORTAL_ESCOLAR);

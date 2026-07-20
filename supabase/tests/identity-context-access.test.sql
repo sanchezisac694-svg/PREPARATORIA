@@ -292,6 +292,15 @@ begin
     ) as cases(auth_id, expected_status, expected_roles, expected_applications)
   loop
     perform set_config('request.jwt.claim.sub', test_case.auth_id, true);
+    perform set_config(
+      'request.jwt.claims',
+      jsonb_build_object(
+        'sub', test_case.auth_id,
+        'role', 'authenticated',
+        'session_version', 1
+      )::text,
+      true
+    );
     select * into context from core.get_current_identity_context();
 
     if context.auth_user_id <> test_case.auth_id::uuid
@@ -599,7 +608,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'core'
       and c.relkind = 'r'
-  ) <> 11 then
+  ) <> 12 then
     raise exception 'FAIL reversal changed tables';
   end if;
 
@@ -608,7 +617,10 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'core'
-      and p.proname like 'current_%'
+      and p.proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
   ) <> 5 then
     raise exception 'FAIL reversal changed Block 4 functions';
   end if;

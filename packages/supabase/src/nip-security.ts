@@ -211,6 +211,10 @@ export interface NipRecoveryPersistencePort {
     readonly recoveryRequestId: string;
     readonly tokenDigest: string;
   }): Promise<NipRecoveryRecord>;
+  invalidateSessionsAfterReset(input: {
+    readonly accountId: string;
+    readonly idempotencyKey: string;
+  }): Promise<{ readonly ok: boolean }>;
   issueAuthorization(input: {
     readonly actorAccountId: string;
     readonly expiresAt: string;
@@ -322,10 +326,15 @@ export async function changeAuthenticatedNip(
   },
   dependencies: {
     readonly audit: NipSecurityAuditPort;
-    readonly auth: Pick<
-      AuthCredentialSecurityPort,
-      "updateAuthenticatedPassword" | "revokeOtherSessions"
-    >;
+    readonly auth: Pick<AuthCredentialSecurityPort, "updateAuthenticatedPassword"> & {
+      invalidateOwnSessions(input: {
+        readonly correlationId: string;
+        readonly eventType: "PASSWORD_CHANGE_INVALIDATION";
+        readonly idempotencyKey: string;
+        readonly reason: "NIP_CHANGED";
+      }): Promise<{ readonly invalidated: boolean; readonly ok: boolean }>;
+      revokeAllSessions(): Promise<{ readonly ok: boolean }>;
+    };
     readonly getIdentity: () => Promise<AuthenticationResult>;
   },
 ): Promise<{ readonly changed: true; readonly otherSessionsRevoked: boolean }> {
@@ -379,17 +388,16 @@ export async function changeAuthenticatedNip(
     personId: context.personId,
     reasonCode: "USER_INITIATED_CHANGE",
   });
-  const revocation = await dependencies.auth.revokeOtherSessions();
-  await dependencies.audit.record({
-    accountId: context.accountId,
-    actorAccountId: context.accountId,
+  const invalidation = await dependencies.auth.invalidateOwnSessions({
     correlationId: command.correlationId,
-    ...(revocation.ok ? {} : { errorCode: "SESSION_REVOCATION_FAILED" as const }),
-    eventType: revocation.ok ? "SESSION_REVOCATION_COMPLETED" : "SESSION_REVOCATION_FAILED",
-    idempotencyKey: `${command.idempotencyKey}:sessions`,
-    personId: context.personId,
-    reasonCode: "USER_INITIATED_CHANGE",
+    eventType: "PASSWORD_CHANGE_INVALIDATION",
+    idempotencyKey: `${command.idempotencyKey}:session-version`,
+    reason: "NIP_CHANGED",
   });
+  if (!invalidation.ok) {
+    throw new NipSecurityError("RECONCILIATION_REQUIRED", changeNipPublicMessage);
+  }
+  const revocation = await dependencies.auth.revokeAllSessions();
   return { changed: true, otherSessionsRevoked: revocation.ok };
 }
 
@@ -511,6 +519,17 @@ export async function resetNipWithAuthorization(
     recoveryRequestId: resolved.recovery.id,
     tokenDigest: digest,
   });
+  const invalidated = await dependencies.persistence.invalidateSessionsAfterReset({
+    accountId: resolved.accountId,
+    idempotencyKey: `${command.idempotencyKey}:session-version`,
+  });
+  if (!invalidated.ok) {
+    await dependencies.persistence.markReconciliationRequired({
+      idempotencyKey: `${command.idempotencyKey}:session-reconcile`,
+      recoveryRequestId: resolved.recovery.id,
+    });
+    throw new NipSecurityError("RECONCILIATION_REQUIRED");
+  }
   const revoked = await dependencies.auth.revokeAllSessions({
     accountId: resolved.accountId,
   });

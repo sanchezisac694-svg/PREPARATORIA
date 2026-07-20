@@ -123,7 +123,7 @@ export async function changeNipAction(_state: LoginState, formData: FormData): P
       },
     );
     attempts.recordSuccess(key);
-    return { success: "El NIP fue actualizado." };
+    redirect("/login");
   } catch {
     attempts.recordFailure(key);
     return { error: changeNipPublicMessage };

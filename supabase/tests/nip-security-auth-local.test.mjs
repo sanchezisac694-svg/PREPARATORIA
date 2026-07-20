@@ -126,6 +126,12 @@ const persistence = {
       status: row.status,
     };
   },
+  async invalidateSessionsAfterReset(input) {
+    database(`select * from core.invalidate_account_sessions(
+      '${input.accountId}', '${actor.accountId}', 'NIP_RESET',
+      '${input.idempotencyKey}', null, 'PASSWORD_RESET_INVALIDATION');`);
+    return { ok: true };
+  },
   async markReconciliationRequired(input) {
     const row = sqlRecord(
       `select id, account_id, person_id, status from core.mark_nip_reconciliation_required(
@@ -265,7 +271,7 @@ try {
             eventType: event.eventType,
             idempotencyKey: event.idempotencyKey,
           });
-          assert.equal(result.ok, true);
+          assert.equal(result.ok, true, event.eventType);
         },
       },
       auth: primary.authentication,
@@ -417,6 +423,12 @@ try {
       );
       delete from core.nip_recovery_requests
         where account_id in ('${fixture.accountId}', '${actor.accountId}');
+      alter table core.account_session_security_events
+        disable trigger account_session_security_events_append_only;
+      delete from core.account_session_security_events
+        where account_id in ('${fixture.accountId}', '${actor.accountId}');
+      alter table core.account_session_security_events
+        enable trigger account_session_security_events_append_only;
       delete from core.account_roles
         where account_id in ('${fixture.accountId}', '${actor.accountId}');
       delete from core.accounts where id in ('${fixture.accountId}', '${actor.accountId}');

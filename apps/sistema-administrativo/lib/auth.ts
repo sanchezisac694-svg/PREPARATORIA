@@ -23,6 +23,7 @@ export async function adminAuthentication() {
 }
 export async function requireAdminAccess() {
   const result = await (await adminAuthentication()).getAuthenticatedIdentity();
+  if (!result.ok && result.error === "SESSION_VERSION_MISMATCH") redirect("/sesion-expirada");
   if (!result.ok)
     redirect(result.error === "ACCOUNT_NOT_LINKED" ? "/acceso-no-disponible" : "/login");
   const decision = evaluateApplicationAccess(

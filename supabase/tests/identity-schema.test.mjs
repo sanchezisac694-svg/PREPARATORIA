@@ -22,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 8, "Fase 2 debe contener exactamente ocho migraciones SQL");
+assert.equal(migrationFiles.length, 9, "Fase 2 debe contener exactamente nueve migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
@@ -32,6 +32,10 @@ const lifecycleMigration = await readFile(join(migrationsDirectory, migrationFil
 const authGatewayMigration = await readFile(join(migrationsDirectory, migrationFiles[5]), "utf8");
 const identifierMigration = await readFile(join(migrationsDirectory, migrationFiles[6]), "utf8");
 const nipSecurityMigration = await readFile(join(migrationsDirectory, migrationFiles[7]), "utf8");
+const sessionSecurityMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[8]),
+  "utf8",
+);
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -83,7 +87,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las ocho migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las nueve migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -92,6 +96,7 @@ test("las ocho migraciones tienen nombres versionados y transacciones explícita
   assert.match(migrationFiles[5], /^\d{14}_expose_authenticated_identity_context_rpc\.sql$/);
   assert.match(migrationFiles[6], /^\d{14}_add_institutional_identifier_access\.sql$/);
   assert.match(migrationFiles[7], /^\d{14}_add_nip_security_recovery\.sql$/);
+  assert.match(migrationFiles[8], /^\d{14}_add_institutional_session_version\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -101,6 +106,7 @@ test("las ocho migraciones tienen nombres versionados y transacciones explícita
     authGatewayMigration,
     identifierMigration,
     nipSecurityMigration,
+    sessionSecurityMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

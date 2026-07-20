@@ -274,7 +274,7 @@ begin
     where relnamespace = core_oid
       and relkind = 'r'
       and relrowsecurity
-  ) <> 11 then
+  ) <> 12 then
     raise exception 'FAIL RLS changed';
   end if;
 
@@ -282,7 +282,10 @@ begin
     select 1
     from pg_proc
     where pronamespace = core_oid
-      and proname like 'current_%'
+      and proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
       and (
         proowner <> (select oid from pg_roles where rolname = 'postgres')
         or provolatile <> 's'
@@ -296,7 +299,10 @@ begin
     select count(*)
     from pg_proc
     where pronamespace = core_oid
-      and proname like 'current_%'
+      and proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
       and prosecdef
   ) <> 4 then
     raise exception 'FAIL SECURITY DEFINER count';
@@ -306,7 +312,10 @@ begin
     select 1
     from pg_proc
     where pronamespace = core_oid
-      and proname like 'current_%'
+      and proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
       and (
         has_function_privilege('public', oid, 'EXECUTE')
         or has_function_privilege('anon', oid, 'EXECUTE')
@@ -415,7 +424,10 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'core'
-      and p.proname like 'current_%'
+      and p.proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
   ) then
     raise exception 'FAIL reversal retained context functions';
   end if;
@@ -446,7 +458,10 @@ begin
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'core'
-      and p.proname like 'current_%'
+      and p.proname in (
+        'current_auth_user_id', 'current_account_id', 'current_person_id',
+        'current_account_status', 'current_role_codes'
+      )
   ) <> 5 then
     raise exception 'FAIL reversal rollback did not restore functions';
   end if;
