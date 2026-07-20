@@ -16,6 +16,15 @@ import {
   safeAccountLifecycleDiagnostic,
 } from "../dist/account-lifecycle.js";
 import {
+  AcademicStructureError,
+  academicStructureErrorCodes,
+  academicSqlFunctions,
+  academicStructureOperations,
+  createGroup,
+  normalizeAcademicCode,
+  validateSemesterNumber,
+} from "../dist/academic-structure.js";
+import {
   createAuthenticationService,
   evaluateApplicationAccess,
   safeInternalRedirect,
@@ -163,6 +172,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
 
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
+    "academic-structure.js",
     "auth-session.js",
     "institutional-access.js",
     "mfa-administration.js",
@@ -502,12 +512,17 @@ test("mfa-administration-local falla al importarse desde un Client Component", a
   await expectClientBuildFailure("mfa-administration-local");
 });
 
+test("academic-structure falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("academic-structure");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
     "admin-contract",
     "provisioning",
     "account-lifecycle",
+    "academic-structure",
     "auth-session",
     "institutional-access",
     "nip-security",
@@ -1889,4 +1904,61 @@ test("catálogos, digests y protección de abuso administrativa son cerrados", (
     target: "sensitive-target",
   });
   assert.doesNotMatch(key, /sensitive/);
+});
+
+test("contrato académico normaliza códigos y limita semestres", () => {
+  assert.equal(normalizeAcademicCode("  synthetic_01 "), "SYNTHETIC_01");
+  assert.equal(validateSemesterNumber(1), 1);
+  assert.equal(validateSemesterNumber(6), 6);
+  assert.throws(
+    () => validateSemesterNumber(0),
+    (error) => error instanceof AcademicStructureError && error.code === "INVALID_SEMESTER_NUMBER",
+  );
+  assert.throws(() => validateSemesterNumber(7), AcademicStructureError);
+  assert.equal(new Set(academicStructureErrorCodes).size, academicStructureErrorCodes.length);
+  assert.equal(academicStructureOperations.length, 38);
+  assert.deepEqual(Object.keys(academicSqlFunctions), [...academicStructureOperations]);
+  assert.equal(
+    academicSqlFunctions.BEGIN_ACADEMIC_PERIOD_CLOSING,
+    "academic.begin_academic_period_closing",
+  );
+  assert.equal(
+    academicSqlFunctions.ACTIVATE_TEACHING_ASSIGNMENT,
+    "academic.activate_teaching_assignment",
+  );
+  assert.doesNotMatch(
+    JSON.stringify(academicSqlFunctions),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio académico usa un puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-group", operation: command.operation, status: "DRAFT" };
+    },
+    summary: async () => ({
+      activeCycleCount: 0,
+      activeGroupCount: 0,
+      activePeriodCount: 0,
+      activePlanCount: 0,
+    }),
+  };
+  const result = await createGroup(
+    {
+      idempotencyKey: "SYNTHETIC_GROUP_01",
+      input: { code: "SYNTHETIC_GROUP_01", semesterNumber: 5 },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-group",
+    operation: "CREATE_GROUP",
+    status: "DRAFT",
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].sqlFunction, "academic.create_group");
+  assert.doesNotMatch(JSON.stringify(result), /email|token|nip|SupabaseClient/i);
 });

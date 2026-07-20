@@ -8,6 +8,10 @@
       "types": "./src/admin-contract.ts",
       "default": "./dist/admin-contract.js"
     },
+    "./academic-structure": {
+      "types": "./src/academic-structure.ts",
+      "default": "./dist/academic-structure.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"

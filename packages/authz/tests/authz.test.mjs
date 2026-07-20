@@ -45,6 +45,21 @@ const expectedRoles = [
 ];
 
 const expectedPermissions = [
+  "academic.assignments.manage",
+  "academic.assignments.read",
+  "academic.cycles.manage",
+  "academic.cycles.read",
+  "academic.groups.manage",
+  "academic.groups.read",
+  "academic.offerings.manage",
+  "academic.offerings.read",
+  "academic.periods.manage",
+  "academic.periods.read",
+  "academic.plans.approve",
+  "academic.plans.manage",
+  "academic.plans.read",
+  "academic.subjects.manage",
+  "academic.subjects.read",
   "academics.manage",
   "academics.read",
   "admissions.manage",
