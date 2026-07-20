@@ -92,12 +92,12 @@ GitHub Actions no se ejecuta localmente de forma idéntica. La validación local
 
 ## Deudas técnicas registradas
 
-| ID     | Deuda                                                                                                                                                 | Fecha límite                              |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| DT-001 | La separación de módulos SSR y administrativos se valida actualmente en tiempo de ejecución; debe añadirse una barrera de importación en compilación. | Antes de la Fase 2                        |
-| DT-002 | El tipo público `SupabaseClient` es amplio; deben crearse adaptadores con capacidades limitadas.                                                      | Antes de cualquier consulta institucional |
+| ID     | Deuda                                                                                         | Fecha límite                              | Estado                 | Resolución                                                                                                                                                             |
+| ------ | --------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DT-001 | La separación de módulos SSR y administrativos se validaba únicamente en tiempo de ejecución. | Antes de la Fase 2                        | Resuelta el 2026-07-16 | `server-only`; builds negativos que exigen el subpath exacto y la violación de Client Component, excluyen errores alternativos y usan fixtures externos al repositorio |
+| DT-002 | El tipo público `SupabaseClient` exponía capacidades generales del SDK.                       | Antes de cualquier consulta institucional | Resuelta el 2026-07-16 | Adaptadores limitados en `packages/supabase/src/types.ts`, `browser.ts`, `ssr.ts` y `admin-contract.ts`                                                                |
 
-Este bloque registra ambas deudas, pero no modifica la infraestructura de Supabase para resolverlas.
+La evidencia completa y las pruebas de cierre están documentadas en `docs/fase-2/bloque-1-endurecimiento-seguridad.md`.
 
 ## Funciones no implementadas
 

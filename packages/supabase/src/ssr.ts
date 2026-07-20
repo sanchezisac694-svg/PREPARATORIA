@@ -1,8 +1,9 @@
+import "server-only";
+
 import { createServerClient } from "@supabase/ssr";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { validateSupabasePublicConfig } from "./config.js";
-import type { SsrCookieAdapter, SupabasePublicConfig } from "./types.js";
+import type { SsrCookieAdapter, SsrSupabaseAdapter, SupabasePublicConfig } from "./types.js";
 
 if (typeof window !== "undefined") {
   throw new Error("@preparatoria/supabase/ssr solo puede importarse desde el servidor.");
@@ -11,16 +12,33 @@ if (typeof window !== "undefined") {
 export type SsrClientFactory = (
   url: string,
   publishableKey: string,
-  options: { cookies: SsrCookieAdapter },
-) => SupabaseClient;
+  options: { cookieOptions: { secure: boolean }; cookies: SsrCookieAdapter },
+) => unknown;
+
+class LimitedSsrSupabaseAdapter implements SsrSupabaseAdapter {
+  readonly runtime = "server";
+  readonly #sdkClient: unknown;
+
+  constructor(sdkClient: unknown) {
+    this.#sdkClient = sdkClient;
+  }
+
+  isInitialized(): boolean {
+    return this.#sdkClient !== null && this.#sdkClient !== undefined;
+  }
+}
 
 export function createSupabaseSsrClient(
   config: SupabasePublicConfig,
   cookies: SsrCookieAdapter,
   factory: SsrClientFactory = createServerClient,
-): SupabaseClient {
+): SsrSupabaseAdapter {
   const validated = validateSupabasePublicConfig(config);
-  return factory(validated.url, validated.publishableKey, { cookies });
+  const sdkClient = factory(validated.url, validated.publishableKey, {
+    cookieOptions: { secure: validated.url.startsWith("https://") },
+    cookies,
+  });
+  return new LimitedSsrSupabaseAdapter(sdkClient);
 }
 
-export type { SsrCookieAdapter, SupabasePublicConfig, TechnicalSupabaseClient } from "./types.js";
+export type { SsrCookieAdapter, SsrSupabaseAdapter, SupabasePublicConfig } from "./types.js";

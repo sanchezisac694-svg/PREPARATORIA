@@ -51,6 +51,23 @@ for (const file of executableFiles) {
   }
 }
 
+const localMfaAdapter = "packages/supabase/src/mfa-administration-local.ts";
+if (repositoryFiles.includes(localMfaAdapter)) {
+  const adapterSource = readFileSync(localMfaAdapter, "utf8");
+  if (!/^import "server-only";/m.test(adapterSource)) {
+    failures.push(`${localMfaAdapter}: falta barrera server-only`);
+  }
+  for (const file of executableFiles.filter((candidate) => candidate !== localMfaAdapter)) {
+    const source = readFileSync(file, "utf8");
+    if (
+      /@preparatoria\/supabase\/mfa-administration-local/.test(source) &&
+      (/(?:^|\/)proxy\.ts$/.test(file) || /["']use client["']/.test(source))
+    ) {
+      failures.push(`${file}: adaptador MFA local importado en superficie cliente o proxy`);
+    }
+  }
+}
+
 const realEnvFiles = trackedFiles.filter((file) => {
   const name = file.split("/").at(-1);
   return name === ".env" || (name.startsWith(".env.") && name !== ".env.example");

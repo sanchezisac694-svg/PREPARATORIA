@@ -3,15 +3,67 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
-test("la página provisional identifica el Portal Escolar", async () => {
-  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-
-  assert.match(source, /Portal Escolar/);
-  assert.match(source, /Base técnica en construcción/);
-  assert.match(source, /Fase 1 — Fundamentos técnicos/);
-  assert.match(source, /@preparatoria\/ui/);
+test("login institucional, aspirante, dashboard y proxy protegen el Portal Escolar", async () => {
+  const [login, institutional, applicant, actions, dashboard, proxy, changeNip, recovery] =
+    await Promise.all([
+      readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/login/applicant-login-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/seguridad/cambiar-nip/change-nip-form.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../app/recuperar-acceso/page.tsx", import.meta.url), "utf8"),
+    ]);
+  assert.match(login, /Portal Escolar/);
+  assert.match(login, /login\/institucional/);
+  assert.match(login, /login\/aspirante/);
+  assert.match(institutional, /name="identifier"/);
+  assert.match(institutional, /name="nip"/);
+  assert.match(institutional, /type="password"/);
+  assert.match(applicant, /name="email"/);
+  assert.match(actions, /signInWithInstitutionalCredentials/);
+  assert.match(actions, /signInAsApplicant/);
+  assert.doesNotMatch(institutional, /alias|@.*invalid/i);
+  assert.match(dashboard, /requirePortalAccess/);
+  assert.match(dashboard, /logoutAction/);
+  assert.match(proxy, /refreshSession/);
+  assert.match(proxy, /getClaims|refreshSession/);
+  assert.doesNotMatch(proxy, /getSession/);
+  assert.match(proxy, /request\.cookies\.set/);
+  assert.match(proxy, /response\.cookies\.set/);
+  assert.match(proxy, /Object\.entries\(headers\)/);
+  assert.match(proxy, /private, no-store/);
+  assert.match(dashboard, /force-dynamic/);
+  assert.match(actions, /changeAuthenticatedNip/);
+  assert.match(changeNip, /current-password/);
+  assert.equal((changeNip.match(/new-password/g) ?? []).length, 2);
+  assert.doesNotMatch(changeNip, /query|searchParams|localStorage|alias/i);
+  assert.match(recovery, /verificaciÃ³n presencial|verificación presencial/);
 });
 
-test("puede importar la fábrica pública de Supabase sin crear un cliente", () => {
+test("puede importar la fábrica pública sin crear un cliente", () => {
   assert.equal(typeof createSupabaseBrowserClient, "function");
+});
+
+test("rutas MFA usan Server Actions y no persisten material TOTP", async () => {
+  const [actions, enrollment, challenge, proxy] = await Promise.all([
+    readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/seguridad/mfa/configurar/mfa-enrollment-form.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../app/mfa/verificar/mfa-challenge-form.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(actions, /beginTotpEnrollment/);
+  assert.match(actions, /verifyTotpEnrollment/);
+  assert.match(actions, /requireMfaStepUp/);
+  assert.match(enrollment, /one-time-code/);
+  assert.match(challenge, /one-time-code/);
+  assert.match(proxy, /mfaRequired/);
+  assert.doesNotMatch(enrollment + challenge, /localStorage|indexedDB|caches\.|searchParams/);
 });

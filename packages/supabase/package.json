@@ -12,6 +12,42 @@
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
+    "./account-lifecycle": {
+      "types": "./src/account-lifecycle.ts",
+      "default": "./dist/account-lifecycle.js"
+    },
+    "./auth-session": {
+      "types": "./src/auth-session.ts",
+      "default": "./dist/auth-session.js"
+    },
+    "./institutional-access": {
+      "types": "./src/institutional-access.ts",
+      "default": "./dist/institutional-access.js"
+    },
+    "./mfa-security": {
+      "types": "./src/mfa-security.ts",
+      "default": "./dist/mfa-security.js"
+    },
+    "./mfa-administration": {
+      "types": "./src/mfa-administration.ts",
+      "default": "./dist/mfa-administration.js"
+    },
+    "./mfa-administration-local": {
+      "types": "./src/mfa-administration-local.ts",
+      "default": "./dist/mfa-administration-local.js"
+    },
+    "./nip-security": {
+      "types": "./src/nip-security.ts",
+      "default": "./dist/nip-security.js"
+    },
+    "./provisioning": {
+      "types": "./src/provisioning.ts",
+      "default": "./dist/provisioning.js"
+    },
+    "./session-security": {
+      "types": "./src/session-security.ts",
+      "default": "./dist/session-security.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"
@@ -25,12 +61,15 @@
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @preparatoria/env build && tsc --project tsconfig.build.json && node --test tests/supabase.test.mjs"
+    "test": "pnpm --filter @preparatoria/env build && pnpm --filter @preparatoria/shared build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/supabase.test.mjs"
   },
   "dependencies": {
+    "@preparatoria/authz": "workspace:*",
     "@preparatoria/env": "workspace:*",
+    "@preparatoria/shared": "workspace:*",
     "@supabase/ssr": "0.12.3",
-    "@supabase/supabase-js": "2.110.6"
+    "@supabase/supabase-js": "2.110.6",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@preparatoria/config": "workspace:*",

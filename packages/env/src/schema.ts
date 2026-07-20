@@ -27,6 +27,29 @@ export const supabasePublicEnvSchema = z
   })
   .strict();
 
+const institutionalAliasDomainSchema = z
+  .string()
+  .min(4)
+  .max(253)
+  .regex(
+    /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/,
+    "Debe ser un dominio DNS en minúsculas, sin protocolo, ruta ni puerto.",
+  );
+
+export const institutionalAuthEnvSchema = z
+  .object({
+    AUTH_ATTEMPT_GUARD_SALT: z
+      .string()
+      .min(32, "La sal privada debe contener al menos 32 caracteres.")
+      .max(256),
+    INSTITUTIONAL_AUTH_ALIAS_DOMAIN: institutionalAliasDomainSchema,
+    NIP_RESET_TOKEN_SECRET: z
+      .string()
+      .min(32, "El secreto de autorizaciones debe contener al menos 32 caracteres.")
+      .max(256),
+  })
+  .strict();
+
 export const serverEnvSchema = publicEnvSchema
   .extend({
     ADMIN_BASE_URL: z.url(),
@@ -44,6 +67,7 @@ export const runtimeEnvSchema = z
   .strict();
 
 export type PublicEnv = z.infer<typeof publicEnvSchema>;
+export type InstitutionalAuthEnv = z.infer<typeof institutionalAuthEnvSchema>;
 export type SupabasePublicEnv = z.infer<typeof supabasePublicEnvSchema>;
 export type RuntimeEnv = z.infer<typeof runtimeEnvSchema>;
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

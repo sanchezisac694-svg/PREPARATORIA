@@ -1,6 +1,8 @@
+import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 const root = realpathSync(process.cwd());
 const trackedFiles = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
@@ -55,6 +57,145 @@ function exportKey(specifier, packageName) {
   return specifier === packageName ? "." : `.${specifier.slice(packageName.length)}`;
 }
 
+function moduleSpecifiers(file, source) {
+  const sourceFile = ts.createSourceFile(
+    file,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.getScriptKindFromFileName(file),
+  );
+  const specifiers = [];
+
+  function addStringLiteral(node) {
+    if (node && ts.isStringLiteralLike(node)) {
+      specifiers.push(node.text);
+    }
+  }
+
+  function visit(node) {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      addStringLiteral(node.moduleSpecifier);
+    } else if (
+      ts.isImportEqualsDeclaration(node) &&
+      ts.isExternalModuleReference(node.moduleReference)
+    ) {
+      addStringLiteral(node.moduleReference.expression);
+    } else if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      const [argument] = node.arguments;
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+
+      if (isDynamicImport || isRequire) {
+        addStringLiteral(argument);
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return specifiers;
+}
+
+function importFailures(file, sourceUnit, specifier, unitsByName) {
+  const importProblems = [];
+
+  if (specifier.startsWith("@preparatoria/")) {
+    const packageName = specifier.split("/").slice(0, 2).join("/");
+    const target = unitsByName.get(packageName);
+    if (!target) {
+      importProblems.push(`${file}: import interno inexistente ${specifier}`);
+      return importProblems;
+    }
+    if (!sourceUnit.dependencies.has(packageName) && sourceUnit.name !== packageName) {
+      importProblems.push(`${file}: ${packageName} no está declarado como dependencia`);
+    }
+    if (sourceUnit.kind === "app" && target.kind === "app" && sourceUnit.name !== target.name) {
+      importProblems.push(`${file}: una aplicación importa la aplicación ${target.name}`);
+    }
+    const key = exportKey(specifier, packageName);
+    if (!Object.hasOwn(target.exports, key)) {
+      importProblems.push(`${file}: ${specifier} no usa un export público declarado`);
+    }
+    return importProblems;
+  }
+
+  if (specifier.startsWith(".")) {
+    const targetPath = resolve(dirname(resolve(root, file)), specifier);
+    if (!isInside(targetPath, sourceUnit.directory)) {
+      importProblems.push(`${file}: import relativo fuera de ${sourceUnit.name}: ${specifier}`);
+    }
+  }
+
+  return importProblems;
+}
+
+function runRegressionChecks() {
+  const embeddedFixture = `
+    const fixture = [
+      'import type { PersonId } from "@preparatoria/authz";',
+      "export { hidden } from '@preparatoria/example/private';",
+    ].join("\\n");
+    void fixture;
+  `;
+  assert.deepEqual(moduleSpecifiers("fixture.test.mjs", embeddedFixture), []);
+
+  const realImports = moduleSpecifiers(
+    "real-imports.test.ts",
+    `
+      import { value } from "@preparatoria/example";
+      export { privateValue } from "@preparatoria/example/private";
+      void value;
+    `,
+  );
+  assert.deepEqual(realImports, ["@preparatoria/example", "@preparatoria/example/private"]);
+
+  const sourceUnit = {
+    dependencies: new Set(),
+    directory: resolve(root, "packages/source"),
+    exports: {},
+    kind: "package",
+    name: "@preparatoria/source",
+  };
+  const targetUnit = {
+    dependencies: new Set(),
+    directory: resolve(root, "packages/example"),
+    exports: { ".": "./dist/index.js" },
+    kind: "package",
+    name: "@preparatoria/example",
+  };
+  const regressionUnits = new Map([
+    [sourceUnit.name, sourceUnit],
+    [targetUnit.name, targetUnit],
+  ]);
+
+  assert.deepEqual(
+    importFailures(
+      "packages/source/tests/real-import.test.ts",
+      sourceUnit,
+      "@preparatoria/example",
+      regressionUnits,
+    ),
+    [
+      "packages/source/tests/real-import.test.ts: @preparatoria/example no está declarado como dependencia",
+    ],
+  );
+  assert.deepEqual(
+    importFailures(
+      "packages/source/tests/private-import.test.ts",
+      { ...sourceUnit, dependencies: new Set(["@preparatoria/example"]) },
+      "@preparatoria/example/private",
+      regressionUnits,
+    ),
+    [
+      "packages/source/tests/private-import.test.ts: @preparatoria/example/private no usa un export público declarado",
+    ],
+  );
+}
+
+runRegressionChecks();
+
 for (const unit of units) {
   for (const dependency of unit.dependencies) {
     const target = byName.get(dependency);
@@ -72,43 +213,14 @@ const sourceFiles = trackedFiles.filter(
     !/(?:^|\/)(?:dist|node_modules)(?:\/|$)/.test(file) &&
     !/\.d\.ts$/.test(file),
 );
-const importPattern =
-  /(?:import|export)\s+(?:type\s+)?(?:[^"'()]*?\s+from\s+)?["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
 
 for (const file of sourceFiles) {
   const sourceUnit = findUnit(file);
   if (!sourceUnit) continue;
 
   const source = readFileSync(file, "utf8");
-  for (const match of source.matchAll(importPattern)) {
-    const specifier = match[1] ?? match[2];
-
-    if (specifier.startsWith("@preparatoria/")) {
-      const packageName = specifier.split("/").slice(0, 2).join("/");
-      const target = byName.get(packageName);
-      if (!target) {
-        failures.push(`${file}: import interno inexistente ${specifier}`);
-        continue;
-      }
-      if (!sourceUnit.dependencies.has(packageName)) {
-        failures.push(`${file}: ${packageName} no está declarado como dependencia`);
-      }
-      if (sourceUnit.kind === "app" && target.kind === "app" && sourceUnit.name !== target.name) {
-        failures.push(`${file}: una aplicación importa la aplicación ${target.name}`);
-      }
-      const key = exportKey(specifier, packageName);
-      if (!Object.hasOwn(target.exports, key)) {
-        failures.push(`${file}: ${specifier} no usa un export público declarado`);
-      }
-      continue;
-    }
-
-    if (specifier.startsWith(".")) {
-      const targetPath = resolve(dirname(resolve(root, file)), specifier);
-      if (!isInside(targetPath, sourceUnit.directory)) {
-        failures.push(`${file}: import relativo fuera de ${sourceUnit.name}: ${specifier}`);
-      }
-    }
+  for (const specifier of moduleSpecifiers(file, source)) {
+    failures.push(...importFailures(file, sourceUnit, specifier, byName));
   }
 }
 
@@ -148,5 +260,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Límites validados: ${units.length} unidades, ${sourceFiles.length} fuentes y ningún ciclo o artefacto rastreado.`,
+  `Límites validados: ${units.length} unidades, ${sourceFiles.length} fuentes, regresiones sintácticas correctas y ningún ciclo o artefacto rastreado.`,
 );

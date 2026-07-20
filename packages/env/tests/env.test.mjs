@@ -4,7 +4,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { parsePublicEnv, parseSupabasePublicEnv } from "../dist/client.js";
-import { parseServerEnv, readRuntimeEnv, readSupabasePublicEnv } from "../dist/server.js";
+import {
+  parseInstitutionalAuthEnv,
+  parseServerEnv,
+  readInstitutionalAuthEnv,
+  readRuntimeEnv,
+  readSupabasePublicEnv,
+} from "../dist/server.js";
 
 test("acepta variables públicas válidas", () => {
   assert.deepEqual(parsePublicEnv({ APP_ENV: "test", LOG_LEVEL: "warn" }), {
@@ -49,6 +55,40 @@ test("valida la configuración pública de Supabase solo cuando se solicita", ()
   assert.throws(
     () => parseSupabasePublicEnv({ NEXT_PUBLIC_SUPABASE_URL: valid.NEXT_PUBLIC_SUPABASE_URL }),
     /NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY/,
+  );
+});
+
+test("valida el dominio y la sal server-only del acceso institucional", () => {
+  const valid = {
+    AUTH_ATTEMPT_GUARD_SALT: "synthetic-test-salt-with-more-than-32-characters",
+    INSTITUTIONAL_AUTH_ALIAS_DOMAIN: "identidad.sistema-preparatoria.invalid",
+    NIP_RESET_TOKEN_SECRET: "synthetic-reset-secret-with-more-than-32-characters",
+  };
+  assert.deepEqual(parseInstitutionalAuthEnv(valid), valid);
+  assert.deepEqual(readInstitutionalAuthEnv(valid), valid);
+  for (const domain of [
+    "https://identidad.invalid",
+    "identidad.invalid/path",
+    "identidad.invalid:443",
+    "IDENTIDAD.INVALID",
+    "localhost",
+  ]) {
+    assert.throws(
+      () =>
+        parseInstitutionalAuthEnv({
+          ...valid,
+          INSTITUTIONAL_AUTH_ALIAS_DOMAIN: domain,
+        }),
+      /INSTITUTIONAL_AUTH_ALIAS_DOMAIN/,
+    );
+  }
+  assert.throws(
+    () => parseInstitutionalAuthEnv({ ...valid, AUTH_ATTEMPT_GUARD_SALT: "short" }),
+    /AUTH_ATTEMPT_GUARD_SALT/,
+  );
+  assert.throws(
+    () => parseInstitutionalAuthEnv({ ...valid, NIP_RESET_TOKEN_SECRET: "short" }),
+    /NIP_RESET_TOKEN_SECRET/,
   );
 });
 

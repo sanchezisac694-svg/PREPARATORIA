@@ -39,14 +39,14 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Check secrets and privileged clients
         run: node .github/scripts/check-security.mjs
 
       - name: Check monorepo boundaries
         run: node .github/scripts/check-boundaries.mjs
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Check formatting
         run: pnpm format:check
