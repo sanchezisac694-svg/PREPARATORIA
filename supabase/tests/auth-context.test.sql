@@ -274,7 +274,7 @@ begin
     where relnamespace = core_oid
       and relkind = 'r'
       and relrowsecurity
-  ) <> 12 then
+  ) <> 15 then
     raise exception 'FAIL RLS changed';
   end if;
 

@@ -22,10 +22,19 @@ export async function adminAuthentication() {
   );
 }
 export async function requireAdminAccess() {
-  const result = await (await adminAuthentication()).getAuthenticatedIdentity();
+  const authentication = await adminAuthentication();
+  const result = await authentication.getAuthenticatedIdentity();
   if (!result.ok && result.error === "SESSION_VERSION_MISMATCH") redirect("/sesion-expirada");
   if (!result.ok)
     redirect(result.error === "ACCOUNT_NOT_LINKED" ? "/acceso-no-disponible" : "/login");
+  if (result.identity.context.mfaRequired && !result.identity.context.mfaSatisfied) {
+    const factors = await authentication.listFactors();
+    redirect(
+      factors.ok && factors.factors.some((factor) => factor.status === "verified")
+        ? "/mfa/verificar"
+        : "/mfa/requerido",
+    );
+  }
   const decision = evaluateApplicationAccess(
     result.identity.context,
     applications.SISTEMA_ADMINISTRATIVO,

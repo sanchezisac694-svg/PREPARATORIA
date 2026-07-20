@@ -47,6 +47,26 @@ import {
   safeTokenDigestEquals,
 } from "../dist/nip-security.js";
 import {
+  beginBackupFactorEnrollment,
+  beginMfaChallenge,
+  beginTotpEnrollment,
+  completeMfaRecovery,
+  createInMemoryMfaAttemptGuard,
+  createMfaAbuseKey,
+  getMfaAssuranceState,
+  listOwnMfaFactors,
+  mfaErrorCodes,
+  mfaSecurityEventTypes,
+  mfaSecurityReasonCodes,
+  requestMfaRecovery,
+  requireMfaCompliance,
+  requireStepUpAuthentication,
+  resolveMfaRequirement,
+  unenrollOwnTotpFactor,
+  verifyTotpChallenge,
+  verifyTotpEnrollment,
+} from "../dist/mfa-security.js";
+import {
   ProvisioningError,
   provisionInstitutionalIdentity,
   provisioningErrorCodes,
@@ -55,6 +75,7 @@ import {
 import { createSupabaseSsrClient } from "../dist/ssr.js";
 import {
   invalidateInstitutionalSessions,
+  parseAuthenticatorAssuranceLevel,
   parseInstitutionalSessionVersionClaim,
   parseVerifiedInstitutionalClaims,
   sessionSecurityErrorCodes,
@@ -129,6 +150,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "account-lifecycle.js",
     "auth-session.js",
     "institutional-access.js",
+    "mfa-security.js",
     "nip-security.js",
     "admin-contract.js",
     "browser.js",
@@ -363,11 +385,13 @@ test("parser session_version accepts only positive safe integers", () => {
   }
   assert.deepEqual(
     parseVerifiedInstitutionalClaims({
+      aal: "aal2",
       session_id: "00000000-0000-4000-8000-000000000001",
       session_version: 2,
       sub: "00000000-0000-4000-8000-000000000002",
     }),
     {
+      aal: "aal2",
       sessionId: "00000000-0000-4000-8000-000000000001",
       sessionVersion: 2n,
       sub: "00000000-0000-4000-8000-000000000002",
@@ -449,6 +473,10 @@ test("nip-security falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("nip-security");
 });
 
+test("mfa-security falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("mfa-security");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
@@ -458,6 +486,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "auth-session",
     "institutional-access",
     "nip-security",
+    "mfa-security",
   ]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
@@ -511,6 +540,14 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
     "utf8",
   );
   assert.doesNotMatch(nipSecuritySource, /SupabaseClient|service_role|process\.env/);
+  const mfaSecuritySource = await readFile(
+    new URL("../src/mfa-security.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(
+    mfaSecuritySource,
+    /SupabaseClient|service_role|process\.env|access_token|refresh_token|\bSession\b/,
+  );
 });
 
 function fakeAuthService({ context, signInError = false, user = { id: "auth-user" } } = {}) {
@@ -537,7 +574,7 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
               { "Cache-Control": "private, no-store", Expires: "0", Pragma: "no-cache" },
             );
             return {
-              data: { claims: user ? { session_version: 1, sub: user.id } : null },
+              data: { claims: user ? { aal: "aal1", session_version: 1, sub: user.id } : null },
               error: user ? null : new Error("expired"),
             };
           },
@@ -555,7 +592,14 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
         async rpc() {
           return {
             data: context
-              ? [{ session_valid: context.account_status === "ACTIVE", ...context }]
+              ? [
+                  {
+                    mfa_required: false,
+                    mfa_satisfied: true,
+                    session_valid: context.account_status === "ACTIVE",
+                    ...context,
+                  },
+                ]
               : [],
             error: null,
           };
@@ -1223,6 +1267,8 @@ test("cambio autenticado revalida contexto, actualiza y revoca otras sesiones", 
               authUserId: "auth",
               personId: "person",
               roleCodes: ["ALUMNO"],
+              mfaRequired: false,
+              mfaSatisfied: true,
               sessionValid: true,
             },
             userId: "auth",
@@ -1256,6 +1302,8 @@ test("cambio autenticado rechaza confirmación, reutilización, estado y NIP act
         authUserId: "auth",
         personId: "person",
         roleCodes: ["ALUMNO"],
+        mfaRequired: false,
+        mfaSatisfied: true,
         sessionValid: true,
       },
       userId: "auth",
@@ -1295,6 +1343,8 @@ test("cambio autenticado rechaza confirmación, reutilización, estado y NIP act
             authUserId: "auth",
             personId: "person",
             roleCodes: [],
+            mfaRequired: false,
+            mfaSatisfied: true,
             sessionValid: true,
           },
           userId: "auth",
@@ -1441,4 +1491,233 @@ test("redacta diagnósticos del ciclo de vida", () => {
     }),
     { email: "[REDACTED]", token: "[REDACTED]" },
   );
+});
+
+test("MFA mantiene catálogos cerrados, política por rol y parser AAL", () => {
+  assert.equal(mfaSecurityEventTypes.length, 21);
+  assert.equal(mfaSecurityReasonCodes.length, 11);
+  assert.equal(mfaErrorCodes.length, 22);
+  assert.equal(resolveMfaRequirement(["ALUMNO"]), "OPTIONAL");
+  assert.equal(resolveMfaRequirement(["DOCENTE"]), "RECOMMENDED");
+  assert.equal(resolveMfaRequirement(["ALUMNO", "CAJA"]), "REQUIRED");
+  assert.equal(parseAuthenticatorAssuranceLevel("aal1"), "aal1");
+  assert.equal(parseAuthenticatorAssuranceLevel("aal2"), "aal2");
+  assert.throws(() => parseAuthenticatorAssuranceLevel("aal3"));
+});
+
+function activeMfaIdentity(application = "PORTAL_ESCOLAR") {
+  return {
+    getIdentity: async () => ({
+      identity: {
+        context: {
+          accountId: "account",
+          accountStatus: "ACTIVE",
+          allowedApplications: [application],
+          authUserId: "auth",
+          mfaRequired: true,
+          mfaSatisfied: application === "SISTEMA_ADMINISTRATIVO",
+          personId: "person",
+          roleCodes: application === "SISTEMA_ADMINISTRATIVO" ? ["CAJA"] : ["ALUMNO"],
+          sessionValid: true,
+        },
+        userId: "auth",
+      },
+      ok: true,
+    }),
+  };
+}
+
+test("enrolamiento TOTP entrega material sensible solo en resultado efímero", async () => {
+  const auth = {
+    enrollTotp: async () => ({
+      factorId: "synthetic-factor",
+      ok: true,
+      qrCode: "<svg>synthetic</svg>",
+      secret: "synthetic-secret",
+      sensitive: true,
+      uri: "otpauth://synthetic",
+    }),
+  };
+  const result = await beginTotpEnrollment(
+    {
+      application: "PORTAL_ESCOLAR",
+      friendlyName: "Teléfono personal",
+      recentlyReauthenticated: true,
+    },
+    { auth, identity: activeMfaIdentity() },
+  );
+  assert.equal(result.factorId, "synthetic-factor");
+  assert.equal(Object.isFrozen(result), true);
+  await assert.rejects(
+    beginTotpEnrollment(
+      { application: "PORTAL_ESCOLAR", recentlyReauthenticated: false },
+      { auth, identity: activeMfaIdentity() },
+    ),
+    (error) => error.code === "MFA_AAL2_REQUIRED",
+  );
+});
+
+test("verify exige AAL2, registra cumplimiento e intenta refrescar", async () => {
+  const calls = [];
+  const auth = {
+    challengeAndVerify: async ({ code }) => {
+      calls.push(`verify:${code.length}`);
+      return { ok: true };
+    },
+    getAuthenticatorAssuranceLevel: async () => ({
+      currentLevel: "aal2",
+      nextLevel: "aal2",
+      ok: true,
+    }),
+    listFactors: async () => ({
+      factors: [{ id: "factor", status: "verified" }],
+      ok: true,
+    }),
+    refreshSessionAfterMfaChange: async () => {
+      calls.push("refresh");
+      return { ok: true };
+    },
+    signOutAfterMfaRecovery: async () => ({ ok: true }),
+  };
+  const result = await verifyTotpEnrollment(
+    {
+      application: "PORTAL_ESCOLAR",
+      code: "001234",
+      correlationId: "correlation",
+      factorId: "factor",
+      idempotencyKey: "idempotency",
+      reason: "USER_ENROLLMENT",
+    },
+    {
+      auth,
+      identity: activeMfaIdentity(),
+      persistence: {
+        recordState: async (event) => {
+          calls.push(`${event.eventType}:${event.factorCount}`);
+          return { ok: true };
+        },
+      },
+    },
+  );
+  assert.deepEqual(result, { factorCount: 1, verified: true });
+  assert.deepEqual(calls, ["verify:6", "MFA_ENROLLMENT_VERIFIED:1", "refresh"]);
+  await assert.rejects(
+    verifyTotpChallenge(
+      { code: "12345", factorId: "factor" },
+      { challengeAndVerify: async () => ({ ok: true }) },
+    ),
+    (error) => error.code === "MFA_CODE_INVALID",
+  );
+});
+
+test("desenrolamiento protege el último factor obligatorio", async () => {
+  const auth = {
+    getAuthenticatorAssuranceLevel: async () => ({
+      currentLevel: "aal2",
+      nextLevel: "aal2",
+      ok: true,
+    }),
+    listFactors: async () => ({
+      factors: [{ id: "factor", status: "verified" }],
+      ok: true,
+    }),
+  };
+  await assert.rejects(
+    unenrollOwnTotpFactor(
+      {
+        application: "SISTEMA_ADMINISTRATIVO",
+        correlationId: "correlation",
+        factorId: "factor",
+        idempotencyKey: "idempotency",
+        mfaRequired: true,
+        recentlyReauthenticated: true,
+      },
+      {
+        auth,
+        identity: activeMfaIdentity("SISTEMA_ADMINISTRATIVO"),
+        persistence: { recordState: async () => ({ ok: true }) },
+      },
+    ),
+    (error) => error.code === "MFA_LAST_REQUIRED_FACTOR",
+  );
+});
+
+test("guardia MFA limita cinco intentos y oculta el sujeto", () => {
+  const key = createMfaAbuseKey({
+    category: "MFA_LOGIN_CHALLENGE",
+    opaqueSubject: "sensitive-subject",
+    salt: "synthetic-salt",
+  });
+  assert.doesNotMatch(key, /sensitive-subject/);
+  const guard = createInMemoryMfaAttemptGuard();
+  for (let index = 0; index < 5; index += 1) {
+    assert.equal(guard.checkAllowed(key), true);
+    guard.recordFailure(key);
+  }
+  assert.equal(guard.checkAllowed(key), false);
+  guard.recordSuccess(key);
+  assert.equal(guard.checkAllowed(key), true);
+});
+
+test("contratos MFA seguros cubren assurance, challenge, recuperación y alias públicos", async () => {
+  const events = [];
+  const auth = {
+    challengeFactor: async () => ({ challengeId: "sensitive-challenge", ok: true }),
+    getAuthenticatorAssuranceLevel: async () => ({
+      currentLevel: "aal2",
+      nextLevel: "aal2",
+      ok: true,
+    }),
+    listFactors: async () => ({
+      factors: [{ friendlyName: "Principal", id: "sensitive-factor", status: "verified" }],
+      ok: true,
+    }),
+  };
+  assert.deepEqual(await getMfaAssuranceState(auth), {
+    currentLevel: "aal2",
+    nextLevel: "aal2",
+    satisfied: true,
+  });
+  assert.deepEqual(await beginMfaChallenge("sensitive-factor", auth), {
+    challengeId: "sensitive-challenge",
+    sensitive: true,
+  });
+  assert.deepEqual(await listOwnMfaFactors(auth), [
+    { factorIndex: 0, friendlyName: "Principal", status: "verified" },
+  ]);
+  const identity = activeMfaIdentity("SISTEMA_ADMINISTRATIVO");
+  assert.equal((await requireMfaCompliance("SISTEMA_ADMINISTRATIVO", identity)).userId, "auth");
+  assert.equal(typeof beginBackupFactorEnrollment, "function");
+  assert.equal(typeof requireStepUpAuthentication, "function");
+  const persistence = {
+    recordState: async (event) => {
+      events.push(event.eventType);
+      return { ok: true };
+    },
+  };
+  assert.deepEqual(
+    await requestMfaRecovery(
+      {
+        application: "SISTEMA_ADMINISTRATIVO",
+        correlationId: "correlation",
+        idempotencyKey: "idempotency",
+      },
+      { identity, persistence },
+    ),
+    { requested: true },
+  );
+  assert.deepEqual(
+    await completeMfaRecovery(
+      { approved: true, correlationId: "correlation", idempotencyKey: "completion" },
+      {
+        auth: { signOutAfterMfaRecovery: async () => ({ ok: true }) },
+        persistence,
+        recovery: {
+          completeApprovedRecovery: async () => ({ completed: true, ok: true }),
+        },
+      },
+    ),
+    { completed: true },
+  );
+  assert.deepEqual(events, ["MFA_RECOVERY_REQUESTED", "MFA_RECOVERY_COMPLETED"]);
 });

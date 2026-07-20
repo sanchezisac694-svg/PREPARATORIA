@@ -22,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 9, "Fase 2 debe contener exactamente nueve migraciones SQL");
+assert.equal(migrationFiles.length, 10, "Fase 2 debe contener exactamente diez migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
@@ -36,6 +36,7 @@ const sessionSecurityMigration = await readFile(
   join(migrationsDirectory, migrationFiles[8]),
   "utf8",
 );
+const mfaSecurityMigration = await readFile(join(migrationsDirectory, migrationFiles[9]), "utf8");
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -87,7 +88,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las nueve migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las diez migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -97,6 +98,7 @@ test("las nueve migraciones tienen nombres versionados y transacciones explícit
   assert.match(migrationFiles[6], /^\d{14}_add_institutional_identifier_access\.sql$/);
   assert.match(migrationFiles[7], /^\d{14}_add_nip_security_recovery\.sql$/);
   assert.match(migrationFiles[8], /^\d{14}_add_institutional_session_version\.sql$/);
+  assert.match(migrationFiles[9], /^\d{14}_add_mfa_totp_aal2\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -107,6 +109,7 @@ test("las nueve migraciones tienen nombres versionados y transacciones explícit
     identifierMigration,
     nipSecurityMigration,
     sessionSecurityMigration,
+    mfaSecurityMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

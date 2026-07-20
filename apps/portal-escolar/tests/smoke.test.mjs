@@ -48,3 +48,22 @@ test("login institucional, aspirante, dashboard y proxy protegen el Portal Escol
 test("puede importar la fábrica pública sin crear un cliente", () => {
   assert.equal(typeof createSupabaseBrowserClient, "function");
 });
+
+test("rutas MFA usan Server Actions y no persisten material TOTP", async () => {
+  const [actions, enrollment, challenge, proxy] = await Promise.all([
+    readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/seguridad/mfa/configurar/mfa-enrollment-form.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../app/mfa/verificar/mfa-challenge-form.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(actions, /beginTotpEnrollment/);
+  assert.match(actions, /verifyTotpEnrollment/);
+  assert.match(actions, /requireMfaStepUp/);
+  assert.match(enrollment, /one-time-code/);
+  assert.match(challenge, /one-time-code/);
+  assert.match(proxy, /mfaRequired/);
+  assert.doesNotMatch(enrollment + challenge, /localStorage|indexedDB|caches\.|searchParams/);
+});

@@ -29,9 +29,20 @@ export type SessionSecurityErrorCode = (typeof sessionSecurityErrorCodes)[number
 export const genericSessionSecurityMessage = "Tu sesión ya no es válida. Inicia sesión nuevamente.";
 
 export interface VerifiedInstitutionalClaims {
+  readonly aal: AuthenticatorAssuranceLevel;
   readonly sessionId?: string;
   readonly sessionVersion: bigint;
   readonly sub: string;
+}
+
+export const authenticatorAssuranceLevels = Object.freeze(["aal1", "aal2"] as const);
+export type AuthenticatorAssuranceLevel = (typeof authenticatorAssuranceLevels)[number];
+
+export function parseAuthenticatorAssuranceLevel(value: unknown): AuthenticatorAssuranceLevel {
+  if (value !== "aal1" && value !== "aal2") {
+    throw new SessionSecurityError("SESSION_VERSION_CLAIM_INVALID");
+  }
+  return value;
 }
 
 export class SessionSecurityError extends Error {
@@ -72,6 +83,7 @@ export function parseVerifiedInstitutionalClaims(value: unknown): VerifiedInstit
     throw new SessionSecurityError("SESSION_VERSION_CLAIM_INVALID");
   }
   return {
+    aal: parseAuthenticatorAssuranceLevel(claims.aal),
     ...(typeof claims.session_id === "string" ? { sessionId: claims.session_id } : {}),
     sessionVersion,
     sub: claims.sub,

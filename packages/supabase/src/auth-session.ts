@@ -63,6 +63,45 @@ interface AuthSessionSdk {
       data: { claims: Record<string, unknown> | null } | null;
       error: unknown;
     }>;
+    mfa: {
+      challenge(input: { factorId: string }): Promise<{
+        data: { id: string } | null;
+        error: unknown;
+      }>;
+      challengeAndVerify(input: { factorId: string; code: string }): Promise<{
+        data: unknown;
+        error: unknown;
+      }>;
+      enroll(input: { factorType: "totp"; friendlyName?: string }): Promise<{
+        data: {
+          id: string;
+          totp: { qr_code: string; secret: string; uri: string };
+        } | null;
+        error: unknown;
+      }>;
+      getAuthenticatorAssuranceLevel(): Promise<{
+        data: { currentLevel: string | null; nextLevel: string | null } | null;
+        error: unknown;
+      }>;
+      listFactors(): Promise<{
+        data: {
+          all: Array<{
+            factor_type: string;
+            friendly_name?: string;
+            id: string;
+            status: string;
+          }>;
+        } | null;
+        error: unknown;
+      }>;
+      unenroll(input: { factorId: string }): Promise<{ data: unknown; error: unknown }>;
+      verify(input: {
+        challengeId: string;
+        code: string;
+        factorId: string;
+      }): Promise<{ data: unknown; error: unknown }>;
+    };
+    refreshSession(): Promise<{ data: unknown; error: unknown }>;
     signInWithPassword(input: {
       email: string;
       password: string;
@@ -75,7 +114,10 @@ interface AuthSessionSdk {
   };
   rpc(
     name:
-      "get_current_identity_context" | "invalidate_own_sessions" | "record_own_nip_security_event",
+      | "get_current_identity_context"
+      | "invalidate_own_sessions"
+      | "record_current_mfa_state"
+      | "record_own_nip_security_event",
     input?: Record<string, unknown>,
   ): Promise<{ data: unknown; error: unknown }>;
 }
@@ -94,6 +136,8 @@ function parseContext(value: unknown): AuthIdentityContext | null {
   const roles = candidate.role_codes;
   const applications = candidate.allowed_applications;
   const sessionValid = candidate.session_valid;
+  const mfaRequired = candidate.mfa_required;
+  const mfaSatisfied = candidate.mfa_satisfied;
   if (
     typeof candidate.auth_user_id !== "string" ||
     (typeof candidate.account_id !== "string" && candidate.account_id !== null) ||
@@ -103,7 +147,9 @@ function parseContext(value: unknown): AuthIdentityContext | null {
     !roles.every(isRole) ||
     !Array.isArray(applications) ||
     !applications.every(isApplication) ||
-    typeof sessionValid !== "boolean"
+    typeof sessionValid !== "boolean" ||
+    typeof mfaRequired !== "boolean" ||
+    typeof mfaSatisfied !== "boolean"
   ) {
     return null;
   }
@@ -114,6 +160,8 @@ function parseContext(value: unknown): AuthIdentityContext | null {
     authUserId: candidate.auth_user_id as AuthIdentityContext["authUserId"],
     personId: candidate.person_id as AuthIdentityContext["personId"],
     roleCodes: roles as Role[],
+    mfaRequired,
+    mfaSatisfied,
     sessionValid,
   };
 }
@@ -198,6 +246,83 @@ export function createAuthenticationService(
   }
 
   return Object.freeze({
+    async challengeAndVerify(input: { readonly factorId: string; readonly code: string }) {
+      const result = await client.auth.mfa.challengeAndVerify(input);
+      return { ok: !result.error };
+    },
+    async challengeFactor(factorId: string) {
+      const result = await client.auth.mfa.challenge({ factorId });
+      return result.error || !result.data
+        ? ({ ok: false } as const)
+        : ({ challengeId: result.data.id, ok: true } as const);
+    },
+    async enrollTotp(friendlyName?: string) {
+      const result = await client.auth.mfa.enroll({
+        factorType: "totp",
+        ...(friendlyName ? { friendlyName } : {}),
+      });
+      return result.error || !result.data
+        ? ({ ok: false } as const)
+        : ({
+            factorId: result.data.id,
+            ok: true,
+            qrCode: result.data.totp.qr_code,
+            secret: result.data.totp.secret,
+            sensitive: true,
+            uri: result.data.totp.uri,
+          } as const);
+    },
+    async getAuthenticatorAssuranceLevel() {
+      const result = await client.auth.mfa.getAuthenticatorAssuranceLevel();
+      const current = result.data?.currentLevel;
+      const next = result.data?.nextLevel;
+      const currentLevel: "aal1" | "aal2" | null =
+        current === "aal1" || current === "aal2" ? current : null;
+      const nextLevel: "aal1" | "aal2" | null = next === "aal1" || next === "aal2" ? next : null;
+      return {
+        currentLevel,
+        nextLevel,
+        ok: !result.error,
+      };
+    },
+    async listFactors() {
+      const result = await client.auth.mfa.listFactors();
+      return {
+        factors: (result.data?.all ?? [])
+          .filter((factor) => factor.factor_type === "totp")
+          .map((factor) => ({
+            ...(factor.friendly_name ? { friendlyName: factor.friendly_name } : {}),
+            id: factor.id,
+            status: factor.status === "verified" ? ("verified" as const) : ("unverified" as const),
+          })),
+        ok: !result.error,
+      };
+    },
+    async recordCurrentMfaState(input: {
+      readonly correlationId: string;
+      readonly eventType: string;
+      readonly factorCount: number;
+      readonly idempotencyKey: string;
+      readonly reason: string;
+      readonly status: string;
+    }) {
+      const result = await client.rpc("record_current_mfa_state", {
+        requested_correlation_id: input.correlationId,
+        requested_event: input.eventType,
+        requested_factor_count: input.factorCount,
+        requested_idempotency_key: input.idempotencyKey,
+        requested_reason: input.reason,
+        requested_status: input.status,
+      });
+      const errorCode =
+        typeof result.error === "object" &&
+        result.error !== null &&
+        "code" in result.error &&
+        typeof result.error.code === "string"
+          ? result.error.code
+          : undefined;
+      return { ...(errorCode ? { errorCode } : {}), ok: !result.error };
+    },
     async refreshSession(): Promise<{ readonly authenticated: boolean }> {
       const result = await client.auth.getClaims();
       return {
@@ -216,6 +341,23 @@ export function createAuthenticationService(
     async refreshIdentity() {
       return getAuthenticatedIdentity();
     },
+    async reauthenticateWithPassword(password: string): Promise<{ readonly ok: boolean }> {
+      const claims = await client.auth.getClaims();
+      const email = claims.data?.claims?.email;
+      if (claims.error || typeof email !== "string" || email.length === 0) {
+        return { ok: false };
+      }
+      const result = await client.auth.signInWithPassword({ email, password });
+      return { ok: !result.error };
+    },
+    async refreshCurrentSession(): Promise<{ readonly ok: boolean }> {
+      const result = await client.auth.refreshSession();
+      return { ok: !result.error };
+    },
+    async refreshSessionAfterMfaChange(): Promise<{ readonly ok: boolean }> {
+      const result = await client.auth.refreshSession();
+      return { ok: !result.error };
+    },
     getAuthenticatedIdentity,
     async signInWithAuthCredentials(input: {
       readonly email: string;
@@ -227,6 +369,22 @@ export function createAuthenticationService(
     },
     async signOutCurrentSession(): Promise<{ readonly ok: boolean }> {
       const result = await client.auth.signOut({ scope: "local" });
+      return { ok: !result.error };
+    },
+    async signOutAfterMfaRecovery(): Promise<{ readonly ok: boolean }> {
+      const result = await client.auth.signOut({ scope: "global" });
+      return { ok: !result.error };
+    },
+    async unenrollFactor(factorId: string) {
+      const result = await client.auth.mfa.unenroll({ factorId });
+      return { ok: !result.error };
+    },
+    async verifyChallenge(input: {
+      readonly challengeId: string;
+      readonly code: string;
+      readonly factorId: string;
+    }) {
+      const result = await client.auth.mfa.verify(input);
       return { ok: !result.error };
     },
     async revokeAllSessions(): Promise<{ readonly ok: boolean }> {

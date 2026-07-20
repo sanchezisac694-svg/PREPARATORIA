@@ -20,6 +20,8 @@ export interface AuthIdentityContext {
   readonly authUserId: AuthUserId | null;
   readonly personId: PersonId | null;
   readonly roleCodes: readonly Role[];
+  readonly mfaRequired: boolean;
+  readonly mfaSatisfied: boolean;
   readonly sessionValid: boolean;
 }
 

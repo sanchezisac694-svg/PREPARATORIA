@@ -20,6 +20,42 @@ export async function proxy(request: NextRequest) {
     },
   );
   await auth.refreshSession();
+  const pathname = request.nextUrl.pathname;
+  const publicPath =
+    pathname === "/" ||
+    pathname.startsWith("/login") ||
+    pathname === "/acceso-no-disponible" ||
+    pathname === "/estado-cuenta" ||
+    pathname === "/sesion-expirada" ||
+    pathname === "/sin-autorizacion" ||
+    pathname === "/recuperar-acceso" ||
+    pathname === "/restablecer-nip";
+  if (!publicPath) {
+    const identity = await auth.getAuthenticatedIdentity();
+    if (!identity.ok) {
+      const target = request.nextUrl.clone();
+      target.pathname =
+        identity.error === "SESSION_VERSION_MISMATCH" ? "/sesion-expirada" : "/login";
+      target.search = "";
+      return NextResponse.redirect(target);
+    }
+    if (identity.identity.context.mfaRequired && !identity.identity.context.mfaSatisfied) {
+      const mfaPath =
+        pathname === "/mfa/verificar" ||
+        pathname === "/mfa/requerido" ||
+        pathname === "/seguridad/mfa/configurar";
+      if (!mfaPath) {
+        const factors = await auth.listFactors();
+        const target = request.nextUrl.clone();
+        target.pathname =
+          factors.ok && factors.factors.some((factor) => factor.status === "verified")
+            ? "/mfa/verificar"
+            : "/mfa/requerido";
+        target.search = "";
+        return NextResponse.redirect(target);
+      }
+    }
+  }
   response.headers.set("Cache-Control", "private, no-store");
   response.headers.set("Pragma", "no-cache");
   response.headers.set("Expires", "0");

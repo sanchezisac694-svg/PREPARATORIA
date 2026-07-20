@@ -297,7 +297,8 @@ begin
       jsonb_build_object(
         'sub', test_case.auth_id,
         'role', 'authenticated',
-        'session_version', 1
+        'session_version', 1,
+        'aal', 'aal2'
       )::text,
       true
     );
@@ -608,7 +609,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'core'
       and c.relkind = 'r'
-  ) <> 12 then
+  ) <> 15 then
     raise exception 'FAIL reversal changed tables';
   end if;
 

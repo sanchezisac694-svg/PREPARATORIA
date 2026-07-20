@@ -24,6 +24,10 @@
       "types": "./src/institutional-access.ts",
       "default": "./dist/institutional-access.js"
     },
+    "./mfa-security": {
+      "types": "./src/mfa-security.ts",
+      "default": "./dist/mfa-security.js"
+    },
     "./nip-security": {
       "types": "./src/nip-security.ts",
       "default": "./dist/nip-security.js"
