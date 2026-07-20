@@ -20,6 +20,10 @@
       "types": "./src/auth-session.ts",
       "default": "./dist/auth-session.js"
     },
+    "./institutional-access": {
+      "types": "./src/institutional-access.ts",
+      "default": "./dist/institutional-access.js"
+    },
     "./provisioning": {
       "types": "./src/provisioning.ts",
       "default": "./dist/provisioning.js"

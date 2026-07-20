@@ -3,13 +3,20 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
-test("login, dashboard y proxy protegen el Sistema Administrativo", async () => {
-  const [login, dashboard, proxy] = await Promise.all([
+test("login institucional, dashboard y proxy protegen el Sistema Administrativo", async () => {
+  const [login, form, actions, dashboard, proxy] = await Promise.all([
     readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
   ]);
   assert.match(login, /Sistema Administrativo/);
+  assert.match(form, /name="identifier"/);
+  assert.match(form, /name="nip"/);
+  assert.doesNotMatch(form, /email|aspirante|alias|@.*invalid/i);
+  assert.match(actions, /signInWithInstitutionalCredentials/);
+  assert.doesNotMatch(actions, /signInAsApplicant/);
   assert.match(dashboard, /requireAdminAccess/);
   assert.match(dashboard, /logoutAction/);
   assert.match(proxy, /refreshSession/);

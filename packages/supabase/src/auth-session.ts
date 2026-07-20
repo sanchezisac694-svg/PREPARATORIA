@@ -75,8 +75,8 @@ function parseContext(value: unknown): AuthIdentityContext | null {
   const applications = candidate.allowed_applications;
   if (
     typeof candidate.auth_user_id !== "string" ||
-    typeof candidate.account_id !== "string" ||
-    typeof candidate.person_id !== "string" ||
+    (typeof candidate.account_id !== "string" && candidate.account_id !== null) ||
+    (typeof candidate.person_id !== "string" && candidate.person_id !== null) ||
     !isAccountStatus(status) ||
     !Array.isArray(roles) ||
     !roles.every(isRole) ||
@@ -99,7 +99,7 @@ export function evaluateApplicationAccess(
   context: AuthIdentityContext | null,
   application: Application,
 ): ApplicationAccessDecision {
-  if (context === null || context.accountId === null || context.personId === null) {
+  if (context === null) {
     return { allowed: false, state: "ACCOUNT_NOT_LINKED" };
   }
   if (context.accountStatus !== accountStatuses.ACTIVE) {
@@ -107,6 +107,9 @@ export function evaluateApplicationAccess(
       allowed: false,
       state: context.accountStatus ?? "ACCOUNT_NOT_LINKED",
     };
+  }
+  if (context.accountId === null || context.personId === null) {
+    return { allowed: false, state: "ACCOUNT_NOT_LINKED" };
   }
   if (!context.allowedApplications.includes(application)) {
     return { allowed: false, state: "APPLICATION_NOT_ALLOWED" };
@@ -164,7 +167,7 @@ export function createAuthenticationService(
       return getAuthenticatedIdentity();
     },
     getAuthenticatedIdentity,
-    async signInWithInstitutionalCredentials(input: {
+    async signInWithAuthCredentials(input: {
       readonly email: string;
       readonly password: string;
     }): Promise<AuthenticationResult> {

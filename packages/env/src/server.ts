@@ -1,12 +1,32 @@
-import type { RuntimeEnv, ServerEnv } from "./schema.js";
+import type { InstitutionalAuthEnv, RuntimeEnv, ServerEnv } from "./schema.js";
 import { parseSupabasePublicEnv } from "./client.js";
-import { formatEnvError, runtimeEnvSchema, serverEnvSchema } from "./schema.js";
+import {
+  formatEnvError,
+  institutionalAuthEnvSchema,
+  runtimeEnvSchema,
+  serverEnvSchema,
+} from "./schema.js";
 
 if (typeof window !== "undefined") {
   throw new Error("@preparatoria/env/server solo puede importarse desde el servidor.");
 }
 
-export type { RuntimeEnv, ServerEnv } from "./schema.js";
+export type { InstitutionalAuthEnv, RuntimeEnv, ServerEnv } from "./schema.js";
+
+export function parseInstitutionalAuthEnv(input: unknown): InstitutionalAuthEnv {
+  const result = institutionalAuthEnvSchema.safeParse(input);
+  if (!result.success) throw new Error(formatEnvError(result.error));
+  return result.data;
+}
+
+export function readInstitutionalAuthEnv(
+  source: NodeJS.ProcessEnv = process.env,
+): InstitutionalAuthEnv {
+  return parseInstitutionalAuthEnv({
+    AUTH_ATTEMPT_GUARD_SALT: source.AUTH_ATTEMPT_GUARD_SALT,
+    INSTITUTIONAL_AUTH_ALIAS_DOMAIN: source.INSTITUTIONAL_AUTH_ALIAS_DOMAIN,
+  });
+}
 
 export function parseServerEnv(input: unknown): ServerEnv {
   const result = serverEnvSchema.safeParse(input);

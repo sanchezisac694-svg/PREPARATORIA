@@ -22,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 6, "Fase 2 debe contener exactamente seis migraciones SQL");
+assert.equal(migrationFiles.length, 7, "Fase 2 debe contener exactamente siete migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
@@ -30,6 +30,11 @@ const ownContextMigration = await readFile(join(migrationsDirectory, migrationFi
 const provisioningMigration = await readFile(join(migrationsDirectory, migrationFiles[3]), "utf8");
 const lifecycleMigration = await readFile(join(migrationsDirectory, migrationFiles[4]), "utf8");
 const authGatewayMigration = await readFile(join(migrationsDirectory, migrationFiles[5]), "utf8");
+const identifierMigration = await readFile(join(migrationsDirectory, migrationFiles[6]), "utf8");
+const institutionalAccessSource = await readFile(
+  join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
+  "utf8",
+);
 const provisioningSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "provisioning.ts"),
   "utf8",
@@ -73,13 +78,14 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las seis migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las siete migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
   assert.match(migrationFiles[3], /^\d{14}_add_identity_provisioning_saga\.sql$/);
   assert.match(migrationFiles[4], /^\d{14}_add_account_lifecycle_control\.sql$/);
   assert.match(migrationFiles[5], /^\d{14}_expose_authenticated_identity_context_rpc\.sql$/);
+  assert.match(migrationFiles[6], /^\d{14}_add_institutional_identifier_access\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -87,10 +93,31 @@ test("las seis migraciones tienen nombres versionados y transacciones explícita
     provisioningMigration,
     lifecycleMigration,
     authGatewayMigration,
+    identifierMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
   }
+});
+
+test("catálogo y normalización institucional permanecen sincronizados", () => {
+  const sqlEnum = identifierMigration.match(
+    /create type core\.institutional_identifier_type as enum \(([\s\S]*?)\);/i,
+  );
+  const tsCatalog = institutionalAccessSource.match(
+    /institutionalIdentifierTypes = Object\.freeze\(\[([\s\S]*?)\] as const\)/,
+  );
+  assert.ok(sqlEnum);
+  assert.ok(tsCatalog);
+  assert.deepEqual(
+    [...sqlEnum[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]),
+    [...tsCatalog[1].matchAll(/"([A-Z_]+)"/g)].map((value) => value[1]),
+  );
+  assert.match(identifierMigration, /\^\[A-Z0-9\]\[A-Z0-9-\]\{2,30\}\[A-Z0-9\]\$/);
+  assert.match(institutionalAccessSource, /\^\[A-Z0-9\]\[A-Z0-9-\]\{2,30\}\[A-Z0-9\]\$/);
+  assert.doesNotMatch(identifierMigration, /(insert|update|delete)[\s\S]*auth\.users/i);
+  assert.doesNotMatch(identifierMigration, /create\s+trigger[\s\S]*on\s+auth\.users/i);
+  assert.doesNotMatch(identifierMigration, /create\s+function\s+public\./i);
 });
 
 function valuesFromProvisioningEnum(typeName) {

@@ -3,6 +3,13 @@ import "server-only";
 import type { AccountStatus, Role } from "@preparatoria/authz";
 import { redactSensitive } from "@preparatoria/shared";
 
+import {
+  deriveInstitutionalAuthAlias,
+  normalizeInstitutionalIdentifier,
+  validateInstitutionalNip,
+  type InstitutionalIdentifierType,
+} from "./institutional-access.js";
+
 if (typeof window !== "undefined") {
   throw new Error("@preparatoria/supabase/provisioning solo puede importarse desde el servidor.");
 }
@@ -46,8 +53,19 @@ export type ProvisioningErrorCode =
 
 export interface ProvisionIdentityCommand {
   readonly accountId: string;
+  readonly credential:
+    | {
+        readonly email: string;
+        readonly kind: "APPLICANT_EMAIL";
+      }
+    | {
+        readonly aliasDomain: string;
+        readonly identifierType: InstitutionalIdentifierType;
+        readonly kind: "INSTITUTIONAL_NIP";
+        readonly nip: string;
+        readonly normalizedIdentifier: string;
+      };
   readonly deliveryMode: ProvisioningDeliveryMode;
-  readonly email: string;
   readonly idempotencyKey: string;
   readonly initialRoleCodes: readonly Role[];
   readonly personId: string;
@@ -73,6 +91,7 @@ export interface AuthAdminProvisioningPort {
     readonly deliveryMode: ProvisioningDeliveryMode;
     readonly email: string;
     readonly idempotencyKey: string;
+    readonly password?: string;
   }): Promise<AuthAdminProvisioningResult>;
   deleteProvisionedUser(input: {
     readonly authUserId: string;
@@ -100,7 +119,14 @@ export interface IdentityProvisioningPersistencePort {
     },
     actorAccountId?: string,
   ): Promise<ProvisioningRecord>;
-  prepare(command: Omit<ProvisionIdentityCommand, "email">): Promise<ProvisioningRecord>;
+  prepare(
+    command: Omit<ProvisionIdentityCommand, "credential"> & {
+      readonly institutionalIdentifier?: {
+        readonly normalized: string;
+        readonly type: InstitutionalIdentifierType;
+      };
+    },
+  ): Promise<ProvisioningRecord>;
   recordAuthCreated(
     requestId: string,
     result: AuthAdminProvisioningResult,
@@ -139,6 +165,19 @@ export async function provisionInstitutionalIdentity(
   },
 ): Promise<ProvisioningRecord> {
   const actor = command.requestedByAccountId;
+  const authCredential =
+    command.credential.kind === "APPLICANT_EMAIL"
+      ? { email: command.credential.email }
+      : {
+          email: deriveInstitutionalAuthAlias({
+            domain: command.credential.aliasDomain,
+            identifierType: command.credential.identifierType,
+            normalizedIdentifier: normalizeInstitutionalIdentifier(
+              command.credential.normalizedIdentifier,
+            ),
+          }),
+          password: validateInstitutionalNip(command.credential.nip),
+        };
   let record = await dependencies.persistence.prepare({
     accountId: command.accountId,
     deliveryMode: command.deliveryMode,
@@ -146,6 +185,14 @@ export async function provisionInstitutionalIdentity(
     initialRoleCodes: command.initialRoleCodes,
     personId: command.personId,
     requestedAccountStatus: command.requestedAccountStatus,
+    ...(command.credential.kind === "INSTITUTIONAL_NIP"
+      ? {
+          institutionalIdentifier: {
+            normalized: normalizeInstitutionalIdentifier(command.credential.normalizedIdentifier),
+            type: command.credential.identifierType,
+          },
+        }
+      : {}),
     ...(actor === undefined ? {} : { requestedByAccountId: actor }),
   });
 
@@ -183,7 +230,7 @@ export async function provisionInstitutionalIdentity(
     try {
       authResult = await dependencies.authAdmin.createOrInviteUser({
         deliveryMode: command.deliveryMode,
-        email: command.email,
+        ...authCredential,
         idempotencyKey: command.idempotencyKey,
       });
     } catch (error) {

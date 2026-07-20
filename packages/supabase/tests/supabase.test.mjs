@@ -22,6 +22,16 @@ import {
 } from "../dist/auth-session.js";
 import { createSupabaseBrowserClient } from "../dist/browser.js";
 import {
+  createAuthenticationAttemptKey,
+  createInMemoryAuthenticationAttemptGuard,
+  deriveInstitutionalAuthAlias,
+  genericInstitutionalLoginMessage,
+  normalizeInstitutionalIdentifier,
+  signInAsApplicant,
+  signInWithInstitutionalCredentials,
+  validateInstitutionalNip,
+} from "../dist/institutional-access.js";
+import {
   ProvisioningError,
   provisionInstitutionalIdentity,
   provisioningErrorCodes,
@@ -97,6 +107,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
     "auth-session.js",
+    "institutional-access.js",
     "admin-contract.js",
     "browser.js",
     "config.js",
@@ -353,6 +364,10 @@ test("auth-session falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("auth-session");
 });
 
+test("institutional-access falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("institutional-access");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
@@ -360,6 +375,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "provisioning",
     "account-lifecycle",
     "auth-session",
+    "institutional-access",
   ]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
@@ -403,6 +419,11 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
   );
   assert.doesNotMatch(authSessionSource, /SupabaseClient|service_role|process\.env/);
   assert.doesNotMatch(authSessionSource, /\.(?:from|channel)\s*\(/);
+  const institutionalAccessSource = await readFile(
+    new URL("../src/institutional-access.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(institutionalAccessSource, /SupabaseClient|service_role|process\.env/);
 });
 
 function fakeAuthService({ context, signInError = false, user = { id: "auth-user" } } = {}) {
@@ -543,7 +564,7 @@ test("autentica, evalúa estados y no devuelve tokens", async () => {
     role_codes: ["ALUMNO"],
   };
   const { service } = fakeAuthService({ context: active });
-  const result = await service.signInWithInstitutionalCredentials({
+  const result = await service.signInWithAuthCredentials({
     email: "local@example.invalid",
     password: "synthetic-password",
   });
@@ -577,7 +598,7 @@ test("autentica, evalúa estados y no devuelve tokens", async () => {
 test("maneja credenciales inválidas, sesión ausente y logout idempotente", async () => {
   const invalid = fakeAuthService({ signInError: true });
   assert.deepEqual(
-    await invalid.service.signInWithInstitutionalCredentials({
+    await invalid.service.signInWithAuthCredentials({
       email: "x@example.invalid",
       password: "incorrect-value",
     }),
@@ -600,10 +621,175 @@ test("solo permite redirects internos cerrados", () => {
   assert.equal(safeInternalRedirect("//evil.invalid"), "/dashboard");
 });
 
+test("normaliza identificadores y conserva ceros significativos", () => {
+  assert.equal(normalizeInstitutionalIdentifier("  ab-0012  "), "AB-0012");
+  assert.equal(normalizeInstitutionalIdentifier("000123"), "000123");
+  assert.equal(normalizeInstitutionalIdentifier("ABCD"), "ABCD");
+  for (const value of ["ABC", "A".repeat(33), "AB C1", "áBC1", "AB/C", "a@b.c", "AB.C"]) {
+    assert.throws(() => normalizeInstitutionalIdentifier(value), /datos proporcionados/);
+  }
+});
+
+test("deriva alias determinista, tipado y no colisiona entre identificadores", () => {
+  const base = {
+    domain: "identidad.sistema-preparatoria.invalid",
+    identifierType: "NUMERO_CONTROL",
+  };
+  const first = deriveInstitutionalAuthAlias({ ...base, normalizedIdentifier: "AB-0001" });
+  const repeated = deriveInstitutionalAuthAlias({ ...base, normalizedIdentifier: "AB-0001" });
+  const second = deriveInstitutionalAuthAlias({ ...base, normalizedIdentifier: "AB-0002" });
+  assert.equal(first, repeated);
+  assert.notEqual(first, second);
+  assert.match(first, /^[a-z0-9-]+@[a-z0-9.-]+$/);
+  assert.throws(
+    () =>
+      deriveInstitutionalAuthAlias({
+        ...base,
+        domain: "https://invalid",
+        normalizedIdentifier: "AB-0001",
+      }),
+    /datos proporcionados/,
+  );
+});
+
+test("valida NIP como string sin perder ceros ni modificar espacios", () => {
+  assert.equal(validateInstitutionalNip("000123"), "000123");
+  assert.equal(validateInstitutionalNip("A1-bcd"), "A1-bcd");
+  for (const value of ["12345", "1".repeat(65), " 000123", "000123 ", "000 123", "abc\n123"]) {
+    assert.throws(() => validateInstitutionalNip(value), /datos proporcionados/);
+  }
+});
+
+test("login institucional separa alias y NIP del resultado y aplica aplicación", async () => {
+  const active = {
+    account_id: "account",
+    account_status: "ACTIVE",
+    allowed_applications: ["PORTAL_ESCOLAR"],
+    auth_user_id: "auth-user",
+    person_id: "person",
+    role_codes: ["ALUMNO"],
+  };
+  const { service } = fakeAuthService({ context: active });
+  const attempts = createInMemoryAuthenticationAttemptGuard();
+  const result = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "PORTAL_ESCOLAR",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: " ab-0001 ",
+      identifierType: "NUMERO_CONTROL",
+      ipAddress: "127.0.0.1",
+      nip: "000123",
+    },
+    { attempts, authentication: service },
+  );
+  assert.equal(result.ok, true);
+  assert.doesNotMatch(JSON.stringify(result), /ab-0001|000123|identidad\.sistema/);
+
+  const denied = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "SISTEMA_ADMINISTRATIVO",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: "AB-0001",
+      identifierType: "NUMERO_CONTROL",
+      ipAddress: "127.0.0.1",
+      nip: "000123",
+    },
+    { attempts, authentication: service },
+  );
+  assert.deepEqual(denied, { error: "APPLICATION_NOT_ALLOWED", ok: false });
+});
+
+test("una sesión Auth válida conserva el estado DISABLED sin exponer identidad interna", async () => {
+  const { service } = fakeAuthService({
+    context: {
+      account_id: null,
+      account_status: "DISABLED",
+      allowed_applications: [],
+      auth_user_id: "auth-user",
+      person_id: null,
+      role_codes: [],
+    },
+  });
+  const result = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "PORTAL_ESCOLAR",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: "AB-0099",
+      identifierType: "NUMERO_CONTROL",
+      ipAddress: null,
+      nip: "000123",
+    },
+    {
+      attempts: createInMemoryAuthenticationAttemptGuard(),
+      authentication: service,
+    },
+  );
+  assert.deepEqual(result, { error: "ACCOUNT_NOT_ACTIVE", ok: false });
+});
+
+test("login de aspirante permanece separado y usa mensaje genérico", async () => {
+  const active = {
+    account_id: "account",
+    account_status: "ACTIVE",
+    allowed_applications: ["PORTAL_ESCOLAR"],
+    auth_user_id: "auth-user",
+    person_id: "person",
+    role_codes: ["ASPIRANTE"],
+  };
+  const { service } = fakeAuthService({ context: active });
+  assert.equal(
+    (
+      await signInAsApplicant(
+        {
+          application: "PORTAL_ESCOLAR",
+          email: "aspirante@example.invalid",
+          password: "synthetic-password",
+        },
+        service,
+      )
+    ).ok,
+    true,
+  );
+  assert.deepEqual(
+    await signInAsApplicant(
+      { application: "PORTAL_ESCOLAR", email: "invalid", password: "short" },
+      service,
+    ),
+    { error: "INVALID_CREDENTIALS", ok: false },
+  );
+  assert.equal(genericInstitutionalLoginMessage.includes("existe"), false);
+});
+
+test("guard bloquea temporalmente, usa llave opaca y reinicia tras éxito", () => {
+  let now = 1_000;
+  const guard = createInMemoryAuthenticationAttemptGuard({ now: () => now });
+  const key = createAuthenticationAttemptKey({
+    identifierType: "MATRICULA",
+    ipAddress: "127.0.0.1",
+    normalizedIdentifier: "MAT-0001",
+    salt: "synthetic-attempt-salt-with-at-least-32-characters",
+  });
+  assert.match(key, /^[a-f0-9]{64}$/);
+  assert.doesNotMatch(key, /MAT|127/);
+  for (let attempt = 0; attempt < 5; attempt += 1) guard.recordFailure(key);
+  assert.equal(guard.checkAllowed(key), false);
+  now += 15 * 60 * 1000;
+  assert.equal(guard.checkAllowed(key), true);
+  guard.recordFailure(key);
+  guard.recordSuccess(key);
+  assert.equal(guard.checkAllowed(key), true);
+});
+
 const provisioningCommand = {
   accountId: "account-test",
+  credential: {
+    email: "sensitive@example.invalid",
+    kind: "APPLICANT_EMAIL",
+  },
   deliveryMode: "INVITE",
-  email: "sensitive@example.invalid",
   idempotencyKey: "idempotency-test",
   initialRoleCodes: ["ALUMNO"],
   personId: "person-test",
@@ -613,6 +799,7 @@ const provisioningCommand = {
 
 function createProvisioningScenario(options = {}) {
   const calls = [];
+  const inputs = [];
   let record = {
     accountId: provisioningCommand.accountId,
     authUserCreatedByRequest: null,
@@ -654,8 +841,9 @@ function createProvisioningScenario(options = {}) {
       };
       return record;
     },
-    async prepare() {
+    async prepare(input) {
       calls.push("prepare");
+      inputs.push({ operation: "prepare", value: input });
       return record;
     },
     async recordAuthCreated(_requestId, result) {
@@ -671,8 +859,9 @@ function createProvisioningScenario(options = {}) {
   };
 
   const authAdmin = {
-    async createOrInviteUser() {
+    async createOrInviteUser(input) {
       calls.push("createOrInviteUser");
+      inputs.push({ operation: "createOrInviteUser", value: input });
       if (options.createError) throw options.createError;
       return {
         authUserId: "auth-user-test",
@@ -690,7 +879,7 @@ function createProvisioningScenario(options = {}) {
     },
   };
 
-  return { authAdmin, calls, persistence };
+  return { authAdmin, calls, inputs, persistence };
 }
 
 test("el orquestador completa e idempotiza sin duplicar el usuario Auth", async () => {
@@ -773,8 +962,8 @@ test("no elimina usuarios preexistentes y reporta compensación fallida", async 
 
 test("redacta correo y valores sensibles de diagnósticos", () => {
   const diagnostic = safeProvisioningDiagnostic({
-    email: provisioningCommand.email,
-    message: `Falló ${provisioningCommand.email}`,
+    email: provisioningCommand.credential.email,
+    message: `Falló ${provisioningCommand.credential.email}`,
     token: "not-a-real-token",
   });
 
@@ -783,6 +972,34 @@ test("redacta correo y valores sensibles de diagnósticos", () => {
     message: "Falló [REDACTED]",
     token: "[REDACTED]",
   });
+});
+
+test("aprovisionamiento institucional entrega NIP solo al puerto Auth", async () => {
+  const scenario = createProvisioningScenario();
+  await provisionInstitutionalIdentity(
+    {
+      ...provisioningCommand,
+      credential: {
+        aliasDomain: "identidad.sistema-preparatoria.invalid",
+        identifierType: "MATRICULA",
+        kind: "INSTITUTIONAL_NIP",
+        nip: "000123",
+        normalizedIdentifier: "MAT-0001",
+      },
+      deliveryMode: "ADMIN_CREATED",
+      requestedAccountStatus: "PENDING_ACTIVATION",
+    },
+    scenario,
+  );
+  const prepared = scenario.inputs.find((input) => input.operation === "prepare").value;
+  const authInput = scenario.inputs.find((input) => input.operation === "createOrInviteUser").value;
+  assert.deepEqual(prepared.institutionalIdentifier, {
+    normalized: "MAT-0001",
+    type: "MATRICULA",
+  });
+  assert.doesNotMatch(JSON.stringify(prepared), /000123|@/);
+  assert.equal(authInput.password, "000123");
+  assert.match(authInput.email, /@identidad\.sistema-preparatoria\.invalid$/);
 });
 
 test("el servicio de ciclo de vida delega comandos tipados sin red", async () => {
