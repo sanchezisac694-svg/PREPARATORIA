@@ -52,6 +52,10 @@
       "types": "./src/session-security.ts",
       "default": "./dist/session-security.js"
     },
+    "./student-enrollment": {
+      "types": "./src/student-enrollment.ts",
+      "default": "./dist/student-enrollment.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"

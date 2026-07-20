@@ -49,6 +49,14 @@ const expectedPermissions = [
   "academic.assignments.read",
   "academic.cycles.manage",
   "academic.cycles.read",
+  "academic.enrollment_requests.manage",
+  "academic.enrollment_requests.read",
+  "academic.enrollments.manage",
+  "academic.enrollments.read",
+  "academic.generations.manage",
+  "academic.generations.read",
+  "academic.group_assignments.manage",
+  "academic.group_assignments.read",
   "academic.groups.manage",
   "academic.groups.read",
   "academic.offerings.manage",
@@ -58,8 +66,13 @@ const expectedPermissions = [
   "academic.plans.approve",
   "academic.plans.manage",
   "academic.plans.read",
+  "academic.progress.manage",
+  "academic.progress.read",
+  "academic.students.manage",
+  "academic.students.read",
   "academic.subjects.manage",
   "academic.subjects.read",
+  "academic.withdrawals.manage",
   "academics.manage",
   "academics.read",
   "admissions.manage",
@@ -534,4 +547,23 @@ test("el paquete no depende de aplicaciones, Supabase, Next.js, React o UI", asy
 test("las pruebas no contienen datos personales reales", async () => {
   const source = await readFile(new URL(import.meta.url), "utf8");
   assert.doesNotMatch(source, /[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d|[\w.+-]+@[\w.-]+\.\w+/);
+});
+
+test("permisos de inscripción respetan baja definitiva y roles no administrativos", () => {
+  assert.equal(hasPermission([roles.SUPERADMIN], permissions.ACADEMIC_WITHDRAWALS_MANAGE), true);
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.ACADEMIC_WITHDRAWALS_MANAGE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.ACADEMIC_ENROLLMENTS_MANAGE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.ACADEMIC_WITHDRAWALS_MANAGE),
+    false,
+  );
+  for (const role of [roles.CAJA, roles.DOCENTE, roles.TUTOR, roles.ALUMNO, roles.ASPIRANTE]) {
+    assert.equal(hasPermission([role], permissions.ACADEMIC_ENROLLMENTS_MANAGE), false);
+  }
 });

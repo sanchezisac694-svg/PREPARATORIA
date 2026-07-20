@@ -76,8 +76,18 @@ select throws_ok(
 );
 
 select is(
-  (select count(*)::integer from pg_class c join pg_namespace n on n.oid=c.relnamespace
-   where n.nspname='academic' and c.relkind='r' and c.relrowsecurity),
+  (select count(*)::integer
+   from pg_class c
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'academic'
+     and c.relkind = 'r'
+     and c.relrowsecurity
+     and c.relname = any (array[
+       'school_cycles', 'academic_periods', 'study_plans', 'plan_semesters',
+       'training_areas', 'subjects', 'curriculum_subjects', 'subject_units',
+       'groups', 'academic_offerings', 'teaching_assignments',
+       'academic_structure_events', 'academic_commands'
+     ])),
   13,
   'RLS is enabled on all thirteen tables'
 );

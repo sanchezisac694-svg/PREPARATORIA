@@ -25,6 +25,15 @@ import {
   validateSemesterNumber,
 } from "../dist/academic-structure.js";
 import {
+  StudentEnrollmentError,
+  createEnrollmentRequest,
+  normalizeInstitutionalStudentCode,
+  studentEnrollmentErrorCodes,
+  studentEnrollmentOperations,
+  studentEnrollmentSqlFunctions,
+  validateStudentSemester,
+} from "../dist/student-enrollment.js";
+import {
   createAuthenticationService,
   evaluateApplicationAccess,
   safeInternalRedirect,
@@ -184,6 +193,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "config.js",
     "provisioning.js",
     "session-security.js",
+    "student-enrollment.js",
     "ssr.js",
     "types.js",
   ];
@@ -516,6 +526,10 @@ test("academic-structure falla al importarse desde un Client Component", async (
   await expectClientBuildFailure("academic-structure");
 });
 
+test("student-enrollment falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("student-enrollment");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
@@ -523,6 +537,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "provisioning",
     "account-lifecycle",
     "academic-structure",
+    "student-enrollment",
     "auth-session",
     "institutional-access",
     "nip-security",
@@ -1961,4 +1976,46 @@ test("servicio académico usa un puerto inyectable y retorna datos mínimos", as
   assert.equal(calls.length, 1);
   assert.equal(calls[0].sqlFunction, "academic.create_group");
   assert.doesNotMatch(JSON.stringify(result), /email|token|nip|SupabaseClient/i);
+});
+
+test("contrato de inscripción conserva ceros y limita semestres", () => {
+  assert.equal(normalizeInstitutionalStudentCode(" 001234 "), "001234");
+  assert.equal(validateStudentSemester(1), 1);
+  assert.equal(validateStudentSemester(6), 6);
+  assert.throws(
+    () => validateStudentSemester(7),
+    (error) => error instanceof StudentEnrollmentError && error.code === "INVALID_SEMESTER_NUMBER",
+  );
+  assert.equal(new Set(studentEnrollmentErrorCodes).size, studentEnrollmentErrorCodes.length);
+  assert.equal(studentEnrollmentOperations.length, 31);
+  assert.deepEqual(Object.keys(studentEnrollmentSqlFunctions), [...studentEnrollmentOperations]);
+  assert.doesNotMatch(
+    JSON.stringify(studentEnrollmentSqlFunctions),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio de inscripción usa puerto inyectable y resultado mínimo", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-request", operation: command.operation, status: "DRAFT" };
+    },
+    validateCoverage: async () => ({ complete: true, expectedCount: 2, offeredCount: 2 }),
+  };
+  const result = await createEnrollmentRequest(
+    {
+      idempotencyKey: "SYNTHETIC_REQUEST_01",
+      input: { semesterNumber: 1, studentRecordId: "synthetic-record" },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-request",
+    operation: "CREATE_ENROLLMENT_REQUEST",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_enrollment_request");
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
 });

@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  14,
-  "Fase 3 Bloque 1 debe conservar once migraciones históricas y añadir tres académicas",
+  15,
+  "Fase 3 Bloque 2 debe conservar once migraciones históricas y añadir cuatro académicas",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -96,7 +96,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las catorce migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las quince migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -111,6 +111,7 @@ test("las catorce migraciones tienen nombres versionados y transacciones explíc
   assert.match(migrationFiles[11], /^\d{14}_create_academic_structure\.sql$/);
   assert.match(migrationFiles[12], /^\d{14}_harden_academic_structure\.sql$/);
   assert.match(migrationFiles[13], /^\d{14}_complete_academic_structure_controls\.sql$/);
+  assert.match(migrationFiles[14], /^\d{14}_create_student_enrollment_trajectory\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
