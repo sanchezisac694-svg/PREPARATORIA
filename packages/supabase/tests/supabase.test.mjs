@@ -67,6 +67,21 @@ import {
   verifyTotpEnrollment,
 } from "../dist/mfa-security.js";
 import {
+  AdministrativeMfaRecoveryError,
+  administrativeMfaAbuseCategories,
+  administrativeMfaRecoveryErrors,
+  administrativeMfaRecoveryStatuses,
+  approveAdministrativeMfaRecovery,
+  createAdministrativeMfaAbuseKey,
+  createMfaFactorReferenceDigest,
+  executeAdministrativeMfaRecovery,
+  requestAdministrativeMfaRecovery,
+} from "../dist/mfa-administration.js";
+import {
+  createLocalPrivilegedAuthMfaAdministrationAdapter,
+  validateLocalSupabaseAuthAdminUrl,
+} from "../dist/mfa-administration-local.js";
+import {
   ProvisioningError,
   provisionInstitutionalIdentity,
   provisioningErrorCodes,
@@ -150,6 +165,8 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "account-lifecycle.js",
     "auth-session.js",
     "institutional-access.js",
+    "mfa-administration.js",
+    "mfa-administration-local.js",
     "mfa-security.js",
     "nip-security.js",
     "admin-contract.js",
@@ -475,6 +492,14 @@ test("nip-security falla al importarse desde un Client Component", async () => {
 
 test("mfa-security falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("mfa-security");
+});
+
+test("mfa-administration falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("mfa-administration");
+});
+
+test("mfa-administration-local falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("mfa-administration-local");
 });
 
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
@@ -1720,4 +1745,148 @@ test("contratos MFA seguros cubren assurance, challenge, recuperación y alias p
     { completed: true },
   );
   assert.deepEqual(events, ["MFA_RECOVERY_REQUESTED", "MFA_RECOVERY_COMPLETED"]);
+});
+
+function administrativeActor(role = "SUPERADMIN", aal = "aal2") {
+  return { aal, accountId: "actor", roles: [role], sessionValid: true };
+}
+
+function administrativeRepository(overrides = {}) {
+  const calls = [];
+  return {
+    calls,
+    approve: async () => "APPROVED",
+    beginExecution: async () => ({
+      authUserId: "internal-auth-user",
+      recoveryId: "recovery",
+      sessionVersion: 2,
+    }),
+    cancel: async () => "CANCELLED",
+    complete: async () => "COMPLETED",
+    completeFactorOperation: async (input) => calls.push(["completeFactor", input.outcome]),
+    markReconciliation: async () => "RECONCILIATION_REQUIRED",
+    markReenrollmentRequired: async () => "REENROLLMENT_REQUIRED",
+    recordFactorOperation: async () => "operation",
+    recordVerification: async () => "IDENTITY_VERIFIED",
+    request: async () => ({ recoveryId: "recovery", status: "PENDING_IDENTITY_VERIFICATION" }),
+    ...overrides,
+  };
+}
+
+test("recuperación administrativa autoriza operadores AAL2 y rechaza CAJA/AAL1", async () => {
+  const repository = administrativeRepository();
+  assert.deepEqual(
+    await requestAdministrativeMfaRecovery(
+      {
+        actor: administrativeActor("CONTROL_ESCOLAR"),
+        correlationId: "correlation",
+        idempotencyKey: "request-key",
+        normalizedInstitutionalIdentifier: "synthetic",
+        reason: "LOST_ALL_FACTORS",
+      },
+      repository,
+    ),
+    { recoveryId: "recovery", status: "PENDING_IDENTITY_VERIFICATION" },
+  );
+  await assert.rejects(
+    requestAdministrativeMfaRecovery(
+      {
+        actor: administrativeActor("CAJA"),
+        correlationId: "correlation",
+        idempotencyKey: "request-key",
+        normalizedInstitutionalIdentifier: "synthetic",
+        reason: "LOST_ALL_FACTORS",
+      },
+      repository,
+    ),
+    (error) =>
+      error instanceof AdministrativeMfaRecoveryError && error.code === "ACTOR_NOT_AUTHORIZED",
+  );
+  await assert.rejects(
+    approveAdministrativeMfaRecovery(
+      {
+        actor: administrativeActor("SUPERADMIN", "aal1"),
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        idempotencyKey: "approval-key",
+        recoveryId: "recovery",
+      },
+      repository,
+    ),
+    (error) =>
+      error instanceof AdministrativeMfaRecoveryError && error.code === "ACTOR_NOT_AUTHORIZED",
+  );
+});
+
+test("ejecución privilegiada no expone IDs y reconcilia eliminación total", async () => {
+  const repository = administrativeRepository();
+  const auth = {
+    deleteUserFactor: async () => ({ outcome: "deleted" }),
+    inspectUserMfaState: async () => ({ ok: true, verifiedTotpCount: 0 }),
+    listUserFactors: async () => ({
+      factors: [
+        {
+          ephemeralFactorId: "ephemeral-only",
+          factorType: "totp",
+          status: "verified",
+        },
+      ],
+      ok: true,
+    }),
+    revokeUserSessions: async () => ({
+      mechanism: "verified_factor_deletion",
+      ok: true,
+    }),
+  };
+  assert.deepEqual(
+    await executeAdministrativeMfaRecovery(
+      {
+        actor: administrativeActor(),
+        digestSecret: "synthetic-digest-key-with-at-least-32-bytes",
+        idempotencyKey: "execution-key",
+        recoveryId: "recovery",
+      },
+      { auth, repository },
+    ),
+    { factorsRemoved: 1, status: "REENROLLMENT_REQUIRED" },
+  );
+  assert.doesNotMatch(JSON.stringify(repository.calls), /ephemeral-only|internal-auth-user/);
+});
+
+test("adaptador privilegiado local falla cerrado para URL remota y credencial ausente", () => {
+  assert.equal(validateLocalSupabaseAuthAdminUrl("http://127.0.0.1:54321").hostname, "127.0.0.1");
+  assert.throws(
+    () => validateLocalSupabaseAuthAdminUrl("https://remote.supabase.co"),
+    (error) =>
+      error instanceof AdministrativeMfaRecoveryError &&
+      error.code === "AUTH_ADMIN_ADAPTER_UNAVAILABLE",
+  );
+  assert.throws(
+    () =>
+      createLocalPrivilegedAuthMfaAdministrationAdapter({
+        url: "http://127.0.0.1:54321",
+      }),
+    (error) =>
+      error instanceof AdministrativeMfaRecoveryError &&
+      error.code === "AUTH_ADMIN_CREDENTIAL_MISSING",
+  );
+});
+
+test("catálogos, digests y protección de abuso administrativa son cerrados", () => {
+  assert.equal(administrativeMfaRecoveryStatuses.length, 14);
+  assert.equal(administrativeMfaRecoveryErrors.length, 28);
+  assert.equal(administrativeMfaAbuseCategories.length, 6);
+  const digest = createMfaFactorReferenceDigest({
+    authUserId: "sensitive-user",
+    ephemeralFactorId: "sensitive-factor",
+    secret: "synthetic-digest-key-with-at-least-32-bytes",
+  });
+  assert.match(digest, /^[0-9a-f]{64}$/);
+  assert.doesNotMatch(digest, /sensitive/);
+  const key = createAdministrativeMfaAbuseKey({
+    actor: "sensitive-actor",
+    category: "MFA_ADMIN_RECOVERY_EXECUTION",
+    salt: "synthetic-salt",
+    target: "sensitive-target",
+  });
+  assert.doesNotMatch(key, /sensitive/);
 });

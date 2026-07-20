@@ -22,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 10, "Fase 2 debe contener exactamente diez migraciones SQL");
+assert.equal(migrationFiles.length, 11, "Fase 2 debe contener exactamente once migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
@@ -37,6 +37,10 @@ const sessionSecurityMigration = await readFile(
   "utf8",
 );
 const mfaSecurityMigration = await readFile(join(migrationsDirectory, migrationFiles[9]), "utf8");
+const mfaAdministrationMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[10]),
+  "utf8",
+);
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -88,7 +92,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las diez migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las once migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -99,6 +103,7 @@ test("las diez migraciones tienen nombres versionados y transacciones explícita
   assert.match(migrationFiles[7], /^\d{14}_add_nip_security_recovery\.sql$/);
   assert.match(migrationFiles[8], /^\d{14}_add_institutional_session_version\.sql$/);
   assert.match(migrationFiles[9], /^\d{14}_add_mfa_totp_aal2\.sql$/);
+  assert.match(migrationFiles[10], /^\d{14}_add_administrative_mfa_recovery\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -110,10 +115,21 @@ test("las diez migraciones tienen nombres versionados y transacciones explícita
     nipSecurityMigration,
     sessionSecurityMigration,
     mfaSecurityMigration,
+    mfaAdministrationMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
   }
+});
+
+test("la recuperación MFA administrativa no escribe tablas Auth ni expone RPC", () => {
+  assert.match(mfaAdministrationMigration, /create table core\.mfa_recovery_requests/i);
+  assert.match(mfaAdministrationMigration, /enable row level security/i);
+  assert.doesNotMatch(
+    mfaAdministrationMigration,
+    /(?:insert|update|delete)\s+(?:into\s+|from\s+)?auth\.(?:users|mfa_factors|sessions)/i,
+  );
+  assert.doesNotMatch(mfaAdministrationMigration, /create function public\..*mfa_recovery/i);
 });
 
 test("catálogos SQL y TypeScript de seguridad NIP permanecen sincronizados", () => {

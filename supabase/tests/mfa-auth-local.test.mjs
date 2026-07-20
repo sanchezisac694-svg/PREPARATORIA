@@ -3,13 +3,14 @@ import { execFileSync } from "node:child_process";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 
 import { createAuthenticationService } from "../../packages/supabase/dist/auth-session.js";
+import { createLocalPrivilegedAuthMfaAdministrationAdapter } from "../../packages/supabase/dist/mfa-administration-local.js";
 
 const rawApiUrl = process.env.LOCAL_SUPABASE_URL;
 const apiUrl = rawApiUrl?.replace("127.0.0.1", "localhost");
 const publishableKey = process.env.LOCAL_SUPABASE_PUBLISHABLE_KEY;
-const serviceKey = process.env.LOCAL_SUPABASE_SERVICE_KEY;
+const adminSecretKey = process.env.SUPABASE_AUTH_ADMIN_SECRET_KEY;
 const databaseContainer = process.env.LOCAL_SUPABASE_DB_CONTAINER;
-if (!apiUrl || !publishableKey || !serviceKey || !databaseContainer) {
+if (!apiUrl || !publishableKey || !adminSecretKey || !databaseContainer) {
   throw new Error("Falta configuración local sintética para MFA.");
 }
 const parsedUrl = new URL(apiUrl);
@@ -43,8 +44,8 @@ async function authAdmin(path, init = {}) {
   return fetch(`${apiUrl}/auth/v1/admin${path}`, {
     ...init,
     headers: {
-      apikey: serviceKey,
-      Authorization: `Bearer ${serviceKey}`,
+      apikey: adminSecretKey,
+      Authorization: `Bearer ${adminSecretKey}`,
       "Content-Type": "application/json",
     },
   });
@@ -96,10 +97,14 @@ function totp(secret, timestamp = Date.now()) {
 
 const fixture = {
   accountId: randomUUID(),
+  approverAccountId: randomUUID(),
+  approverPersonId: randomUUID(),
   authUserId: null,
   email: `mfa-${randomUUID()}@example.invalid`,
   password: randomBytes(18).toString("base64url"),
   personId: randomUUID(),
+  requesterAccountId: randomUUID(),
+  requesterPersonId: randomUUID(),
 };
 
 try {
@@ -119,6 +124,15 @@ try {
     values ('${fixture.accountId}','${fixture.personId}','${fixture.authUserId}','ACTIVE');
     insert into core.account_roles (account_id,role_id)
     select '${fixture.accountId}',id from core.roles where code='ADMINISTRATIVO';
+    insert into core.people (id) values
+      ('${fixture.requesterPersonId}'),('${fixture.approverPersonId}');
+    insert into core.accounts (id,person_id,account_status) values
+      ('${fixture.requesterAccountId}','${fixture.requesterPersonId}','ACTIVE'),
+      ('${fixture.approverAccountId}','${fixture.approverPersonId}','ACTIVE');
+    insert into core.account_roles (account_id,role_id)
+    select '${fixture.requesterAccountId}'::uuid,id from core.roles where code='SUPERADMIN'
+    union all
+    select '${fixture.approverAccountId}'::uuid,id from core.roles where code='ADMINISTRATIVO';
   `);
 
   const firstSession = createSession();
@@ -164,7 +178,17 @@ try {
     true,
   );
   assert.equal((await firstSession.listFactors()).factors.length, 2);
-  assert.equal((await firstSession.unenrollFactor(backup.factorId)).ok, true);
+  const localAdministration = createLocalPrivilegedAuthMfaAdministrationAdapter({
+    secretKey: adminSecretKey,
+    url: apiUrl,
+  });
+  const privilegedSnapshot = await localAdministration.listUserFactors(fixture.authUserId);
+  assert.equal(privilegedSnapshot.ok, true);
+  assert.equal(privilegedSnapshot.factors.length, 2);
+  assert.equal(
+    (await localAdministration.deleteUserFactor(fixture.authUserId, backup.factorId)).outcome,
+    "deleted",
+  );
   assert.equal((await firstSession.listFactors()).factors.length, 1);
 
   const recorded = await firstSession.recordCurrentMfaState({
@@ -219,14 +243,92 @@ try {
   assert.equal((await secondSession.getAuthenticatorAssuranceLevel()).currentLevel, "aal2");
   assert.equal((await secondSession.getAuthenticatedIdentity()).ok, true);
 
+  const requestKey = randomUUID();
+  const approvalKey = randomUUID();
+  const executionKey = randomUUID();
+  const recoveryId = database(
+    `select core.request_mfa_recovery(
+      '${fixture.accountId}','${fixture.requesterAccountId}','LOST_ALL_FACTORS',
+      '${requestKey}','${randomUUID()}','aal2')`,
+    true,
+  ).trim();
+  database(`select core.record_mfa_identity_verification(
+    '${recoveryId}','${fixture.requesterAccountId}','IN_PERSON_WITH_INSTITUTIONAL_RECORD',
+    '${randomUUID()}','aal2')`);
+  assert.throws(() =>
+    database(`select core.approve_mfa_recovery(
+      '${recoveryId}','${fixture.requesterAccountId}','${randomUUID()}',
+      now()+interval '1 hour','aal2')`),
+  );
+  database(`select core.approve_mfa_recovery(
+    '${recoveryId}','${fixture.approverAccountId}','${approvalKey}',
+    now()+interval '1 hour','aal2')`);
+  database(`select * from core.begin_mfa_recovery_execution(
+    '${recoveryId}','${fixture.approverAccountId}','${executionKey}','aal2')`);
+  assert.equal(
+    Number(
+      database(
+        `select session_version from core.accounts where id='${fixture.accountId}'`,
+        true,
+      ).trim(),
+    ),
+    3,
+  );
+  assert.equal(
+    (await localAdministration.deleteUserFactor(fixture.authUserId, verifiedFactors[0].id)).outcome,
+    "deleted",
+  );
+  assert.deepEqual(await localAdministration.inspectUserMfaState(fixture.authUserId), {
+    ok: true,
+    verifiedTotpCount: 0,
+  });
+  database(`select core.mark_mfa_reenrollment_required(
+    '${recoveryId}','${fixture.approverAccountId}',1,'${randomUUID()}')`);
+
+  const recoverySession = createSession();
+  assert.equal(
+    (
+      await recoverySession.signInWithAuthCredentials({
+        email: fixture.email,
+        password: fixture.password,
+      })
+    ).ok,
+    true,
+  );
+  assert.equal((await recoverySession.getAuthenticatorAssuranceLevel()).currentLevel, "aal1");
+  const replacement = await recoverySession.enrollTotp("Reenrolado");
+  assert.equal(replacement.ok, true);
+  assert.equal(
+    (
+      await recoverySession.challengeAndVerify({
+        code: totp(replacement.secret),
+        factorId: replacement.factorId,
+      })
+    ).ok,
+    true,
+  );
+  database(`update core.mfa_recovery_requests set status='REENROLLMENT_IN_PROGRESS'
+    where id='${recoveryId}'`);
+  database(`select core.complete_mfa_recovery(
+    '${recoveryId}','${fixture.approverAccountId}',1,'aal2','${randomUUID()}')`);
+  assert.equal(
+    database(`select status from core.mfa_recovery_requests where id='${recoveryId}'`, true).trim(),
+    "COMPLETED",
+  );
+  assert.equal(
+    (await localAdministration.deleteUserFactor(fixture.authUserId, replacement.factorId)).outcome,
+    "deleted",
+  );
+
   console.log(
     JSON.stringify(
       {
         aal1: "PASS",
         aal2: "PASS",
         backupFactor: "PASS",
+        privilegedAdapter: "PASS",
         cleanup: "PENDING",
-        factorCount: 1,
+        factorCount: 0,
         enrollment: "PASS",
         staleSession: "PASS",
       },
@@ -238,6 +340,12 @@ try {
   try {
     database(`
       set session_replication_role=replica;
+      delete from core.mfa_administrative_security_events
+        where account_id='${fixture.accountId}';
+      delete from core.mfa_recovery_factor_operations where recovery_request_id in (
+        select id from core.mfa_recovery_requests where account_id='${fixture.accountId}'
+      );
+      delete from core.mfa_recovery_requests where account_id='${fixture.accountId}';
       delete from core.account_mfa_security_events where account_id='${fixture.accountId}';
       delete from core.account_session_security_events where account_id='${fixture.accountId}';
       set session_replication_role=origin;
@@ -245,6 +353,12 @@ try {
       delete from core.account_roles where account_id='${fixture.accountId}';
       delete from core.accounts where id='${fixture.accountId}';
       delete from core.people where id='${fixture.personId}';
+      delete from core.account_roles where account_id in
+        ('${fixture.requesterAccountId}','${fixture.approverAccountId}');
+      delete from core.accounts where id in
+        ('${fixture.requesterAccountId}','${fixture.approverAccountId}');
+      delete from core.people where id in
+        ('${fixture.requesterPersonId}','${fixture.approverPersonId}');
     `);
   } catch {}
   if (fixture.authUserId) {

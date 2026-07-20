@@ -28,6 +28,14 @@
       "types": "./src/mfa-security.ts",
       "default": "./dist/mfa-security.js"
     },
+    "./mfa-administration": {
+      "types": "./src/mfa-administration.ts",
+      "default": "./dist/mfa-administration.js"
+    },
+    "./mfa-administration-local": {
+      "types": "./src/mfa-administration-local.ts",
+      "default": "./dist/mfa-administration-local.js"
+    },
     "./nip-security": {
       "types": "./src/nip-security.ts",
       "default": "./dist/nip-security.js"

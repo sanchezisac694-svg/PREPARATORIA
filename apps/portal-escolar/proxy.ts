@@ -43,7 +43,8 @@ export async function proxy(request: NextRequest) {
       const mfaPath =
         pathname === "/mfa/verificar" ||
         pathname === "/mfa/requerido" ||
-        pathname === "/seguridad/mfa/configurar";
+        pathname === "/seguridad/mfa/configurar" ||
+        pathname === "/seguridad/mfa/recuperacion";
       if (!mfaPath) {
         const factors = await auth.listFactors();
         const target = request.nextUrl.clone();
