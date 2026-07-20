@@ -62,6 +62,7 @@ test("valida el dominio y la sal server-only del acceso institucional", () => {
   const valid = {
     AUTH_ATTEMPT_GUARD_SALT: "synthetic-test-salt-with-more-than-32-characters",
     INSTITUTIONAL_AUTH_ALIAS_DOMAIN: "identidad.sistema-preparatoria.invalid",
+    NIP_RESET_TOKEN_SECRET: "synthetic-reset-secret-with-more-than-32-characters",
   };
   assert.deepEqual(parseInstitutionalAuthEnv(valid), valid);
   assert.deepEqual(readInstitutionalAuthEnv(valid), valid);
@@ -84,6 +85,10 @@ test("valida el dominio y la sal server-only del acceso institucional", () => {
   assert.throws(
     () => parseInstitutionalAuthEnv({ ...valid, AUTH_ATTEMPT_GUARD_SALT: "short" }),
     /AUTH_ATTEMPT_GUARD_SALT/,
+  );
+  assert.throws(
+    () => parseInstitutionalAuthEnv({ ...valid, NIP_RESET_TOKEN_SECRET: "short" }),
+    /NIP_RESET_TOKEN_SECRET/,
   );
 });
 

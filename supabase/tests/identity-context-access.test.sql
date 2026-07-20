@@ -599,7 +599,7 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'core'
       and c.relkind = 'r'
-  ) <> 8 then
+  ) <> 11 then
     raise exception 'FAIL reversal changed tables';
   end if;
 

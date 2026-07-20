@@ -43,6 +43,10 @@ export const institutionalAuthEnvSchema = z
       .min(32, "La sal privada debe contener al menos 32 caracteres.")
       .max(256),
     INSTITUTIONAL_AUTH_ALIAS_DOMAIN: institutionalAliasDomainSchema,
+    NIP_RESET_TOKEN_SECRET: z
+      .string()
+      .min(32, "El secreto de autorizaciones debe contener al menos 32 caracteres.")
+      .max(256),
   })
   .strict();
 

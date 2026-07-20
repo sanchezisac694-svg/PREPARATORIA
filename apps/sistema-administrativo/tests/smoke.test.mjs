@@ -4,12 +4,13 @@ import test from "node:test";
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
 test("login institucional, dashboard y proxy protegen el Sistema Administrativo", async () => {
-  const [login, form, actions, dashboard, proxy] = await Promise.all([
+  const [login, form, actions, dashboard, proxy, changeNip] = await Promise.all([
     readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/seguridad/cambiar-nip/change-nip-form.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(login, /Sistema Administrativo/);
   assert.match(form, /name="identifier"/);
@@ -27,6 +28,10 @@ test("login institucional, dashboard y proxy protegen el Sistema Administrativo"
   assert.match(proxy, /Object\.entries\(headers\)/);
   assert.match(proxy, /private, no-store/);
   assert.match(dashboard, /force-dynamic/);
+  assert.match(actions, /changeAuthenticatedNip/);
+  assert.match(changeNip, /current-password/);
+  assert.equal((changeNip.match(/new-password/g) ?? []).length, 2);
+  assert.doesNotMatch(changeNip, /query|searchParams|localStorage|alias/i);
 });
 
 test("puede importar la fábrica pública sin crear un cliente", () => {

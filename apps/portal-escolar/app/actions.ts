@@ -1,5 +1,7 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
+
 import { applications } from "@preparatoria/authz";
 import { readInstitutionalAuthEnv } from "@preparatoria/env/server";
 import { safeInternalRedirect } from "@preparatoria/supabase/auth-session";
@@ -10,6 +12,11 @@ import {
   signInAsApplicant,
   signInWithInstitutionalCredentials,
 } from "@preparatoria/supabase/institutional-access";
+import {
+  changeAuthenticatedNip,
+  changeNipPublicMessage,
+  createNipAbuseKey,
+} from "@preparatoria/supabase/nip-security";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -17,6 +24,7 @@ import { portalAuthentication } from "../lib/auth";
 
 export interface LoginState {
   readonly error?: string;
+  readonly success?: string;
 }
 
 const attempts = createInMemoryAuthenticationAttemptGuard();
@@ -100,4 +108,58 @@ export async function institutionalLoginAction(
 export async function logoutAction() {
   await (await portalAuthentication()).signOutCurrentSession();
   redirect("/login");
+}
+
+export async function changeNipAction(_state: LoginState, formData: FormData): Promise<LoginState> {
+  const currentNip = formData.get("currentNip");
+  const newNip = formData.get("newNip");
+  const confirmation = formData.get("confirmation");
+  if (
+    typeof currentNip !== "string" ||
+    typeof newNip !== "string" ||
+    typeof confirmation !== "string"
+  ) {
+    return { error: changeNipPublicMessage };
+  }
+  const env = readInstitutionalAuthEnv();
+  const requestHeaders = await headers();
+  const key = createNipAbuseKey({
+    category: "CHANGE_NIP",
+    opaqueSubject: clientIp(requestHeaders) ?? "unknown",
+    salt: env.AUTH_ATTEMPT_GUARD_SALT,
+  });
+  if (!attempts.checkAllowed(key)) return { error: changeNipPublicMessage };
+  const authentication = await portalAuthentication();
+  try {
+    await changeAuthenticatedNip(
+      {
+        application: applications.PORTAL_ESCOLAR,
+        confirmation,
+        correlationId: randomUUID(),
+        currentNip,
+        idempotencyKey: randomUUID(),
+        newNip,
+      },
+      {
+        audit: {
+          async record(event) {
+            const result = await authentication.recordOwnNipSecurityEvent({
+              correlationId: event.correlationId,
+              ...(event.errorCode ? { errorCode: event.errorCode } : {}),
+              eventType: event.eventType,
+              idempotencyKey: event.idempotencyKey,
+            });
+            if (!result.ok) throw new Error("NIP_SECURITY_AUDIT_FAILED");
+          },
+        },
+        auth: authentication,
+        getIdentity: authentication.getAuthenticatedIdentity,
+      },
+    );
+    attempts.recordSuccess(key);
+    return { success: "El NIP fue actualizado." };
+  } catch {
+    attempts.recordFailure(key);
+    return { error: changeNipPublicMessage };
+  }
 }

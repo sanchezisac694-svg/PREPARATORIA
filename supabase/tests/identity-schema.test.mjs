@@ -22,7 +22,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-assert.equal(migrationFiles.length, 7, "Fase 2 debe contener exactamente siete migraciones SQL");
+assert.equal(migrationFiles.length, 8, "Fase 2 debe contener exactamente ocho migraciones SQL");
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
 const authContextMigration = await readFile(join(migrationsDirectory, migrationFiles[1]), "utf8");
@@ -31,6 +31,7 @@ const provisioningMigration = await readFile(join(migrationsDirectory, migration
 const lifecycleMigration = await readFile(join(migrationsDirectory, migrationFiles[4]), "utf8");
 const authGatewayMigration = await readFile(join(migrationsDirectory, migrationFiles[5]), "utf8");
 const identifierMigration = await readFile(join(migrationsDirectory, migrationFiles[6]), "utf8");
+const nipSecurityMigration = await readFile(join(migrationsDirectory, migrationFiles[7]), "utf8");
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -41,6 +42,10 @@ const provisioningSource = await readFile(
 );
 const lifecycleSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "account-lifecycle.ts"),
+  "utf8",
+);
+const nipSecuritySource = await readFile(
+  join(repositoryRoot, "packages", "supabase", "src", "nip-security.ts"),
   "utf8",
 );
 const config = await readFile(configPath, "utf8");
@@ -78,7 +83,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las siete migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las ocho migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -86,6 +91,7 @@ test("las siete migraciones tienen nombres versionados y transacciones explícit
   assert.match(migrationFiles[4], /^\d{14}_add_account_lifecycle_control\.sql$/);
   assert.match(migrationFiles[5], /^\d{14}_expose_authenticated_identity_context_rpc\.sql$/);
   assert.match(migrationFiles[6], /^\d{14}_add_institutional_identifier_access\.sql$/);
+  assert.match(migrationFiles[7], /^\d{14}_add_nip_security_recovery\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -94,10 +100,36 @@ test("las siete migraciones tienen nombres versionados y transacciones explícit
     lifecycleMigration,
     authGatewayMigration,
     identifierMigration,
+    nipSecurityMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
   }
+});
+
+test("catálogos SQL y TypeScript de seguridad NIP permanecen sincronizados", () => {
+  const mappings = [
+    ["nip_recovery_status", "nipRecoveryStatuses"],
+    ["nip_security_event_type", "nipSecurityEventTypes"],
+    ["nip_security_reason_code", "nipSecurityReasonCodes"],
+    ["nip_security_error_code", "nipSecurityErrorCodes"],
+  ];
+  for (const [sqlName, tsName] of mappings) {
+    const sql = nipSecurityMigration.match(
+      new RegExp(`create type core\\.${sqlName} as enum \\(([\\s\\S]*?)\\);`, "i"),
+    );
+    const ts = nipSecuritySource.match(
+      new RegExp(`${tsName} = Object\\.freeze\\(\\[([\\s\\S]*?)\\] as const\\)`),
+    );
+    assert.ok(sql, `Falta ${sqlName}`);
+    assert.ok(ts, `Falta ${tsName}`);
+    assert.deepEqual(
+      [...sql[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]),
+      [...ts[1].matchAll(/"([A-Z_]+)"/g)].map((value) => value[1]),
+    );
+  }
+  assert.doesNotMatch(nipSecurityMigration, /(insert|update|delete)[\s\S]*auth\.users/i);
+  assert.doesNotMatch(nipSecurityMigration, /create\s+trigger[\s\S]*on\s+auth\.users/i);
 });
 
 test("catálogo y normalización institucional permanecen sincronizados", () => {

@@ -25,6 +25,7 @@ export function readInstitutionalAuthEnv(
   return parseInstitutionalAuthEnv({
     AUTH_ATTEMPT_GUARD_SALT: source.AUTH_ATTEMPT_GUARD_SALT,
     INSTITUTIONAL_AUTH_ALIAS_DOMAIN: source.INSTITUTIONAL_AUTH_ALIAS_DOMAIN,
+    NIP_RESET_TOKEN_SECRET: source.NIP_RESET_TOKEN_SECRET,
   });
 }
 

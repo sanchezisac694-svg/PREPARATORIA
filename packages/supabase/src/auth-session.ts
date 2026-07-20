@@ -50,14 +50,24 @@ export interface ApplicationAccessDecision {
 
 interface AuthSessionSdk {
   readonly auth: {
-    getClaims(): Promise<{ data: { claims: { sub?: string } | null } | null; error: unknown }>;
+    getClaims(): Promise<{
+      data: { claims: { email?: string; sub?: string } | null } | null;
+      error: unknown;
+    }>;
     signInWithPassword(input: {
       email: string;
       password: string;
     }): Promise<{ data: unknown; error: unknown }>;
-    signOut(): Promise<{ error: unknown }>;
+    signOut(options?: { scope?: "global" | "local" | "others" }): Promise<{ error: unknown }>;
+    updateUser(input: {
+      current_password?: string;
+      password?: string;
+    }): Promise<{ data: unknown; error: unknown }>;
   };
-  rpc(name: "get_current_identity_context"): Promise<{ data: unknown; error: unknown }>;
+  rpc(
+    name: "get_current_identity_context" | "record_own_nip_security_event",
+    input?: Record<string, unknown>,
+  ): Promise<{ data: unknown; error: unknown }>;
 }
 
 export type AuthSessionClientFactory = (
@@ -176,7 +186,44 @@ export function createAuthenticationService(
       return getAuthenticatedIdentity();
     },
     async signOutCurrentSession(): Promise<{ readonly ok: boolean }> {
-      const result = await client.auth.signOut();
+      const result = await client.auth.signOut({ scope: "local" });
+      return { ok: !result.error };
+    },
+    async updateAuthenticatedPassword(input: {
+      readonly currentPassword: string;
+      readonly newPassword: string;
+    }): Promise<{ readonly ok: boolean }> {
+      const claims = await client.auth.getClaims();
+      const email = claims.data?.claims?.email;
+      if (claims.error || typeof email !== "string" || email.length === 0) {
+        return { ok: false };
+      }
+      const verification = await client.auth.signInWithPassword({
+        email,
+        password: input.currentPassword,
+      });
+      if (verification.error) return { ok: false };
+      const result = await client.auth.updateUser({
+        password: input.newPassword,
+      });
+      return { ok: !result.error };
+    },
+    async revokeOtherSessions(): Promise<{ readonly ok: boolean }> {
+      const result = await client.auth.signOut({ scope: "others" });
+      return { ok: !result.error };
+    },
+    async recordOwnNipSecurityEvent(input: {
+      readonly correlationId: string;
+      readonly errorCode?: string;
+      readonly eventType: string;
+      readonly idempotencyKey: string;
+    }): Promise<{ readonly ok: boolean }> {
+      const result = await client.rpc("record_own_nip_security_event", {
+        requested_correlation_id: input.correlationId,
+        requested_error: input.errorCode ?? null,
+        requested_event: input.eventType,
+        requested_idempotency_key: input.idempotencyKey,
+      });
       return { ok: !result.error };
     },
   });

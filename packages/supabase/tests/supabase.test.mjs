@@ -32,6 +32,21 @@ import {
   validateInstitutionalNip,
 } from "../dist/institutional-access.js";
 import {
+  changeAuthenticatedNip,
+  createNipAbuseKey,
+  digestNipResetToken,
+  generateNipResetToken,
+  isValidNipRecoveryTransition,
+  nipAbuseCategories,
+  nipRecoveryAdministrativeRoles,
+  nipRecoveryStatuses,
+  nipSecurityErrorCodes,
+  nipSecurityEventTypes,
+  nipSecurityReasonCodes,
+  resetNipWithAuthorization,
+  safeTokenDigestEquals,
+} from "../dist/nip-security.js";
+import {
   ProvisioningError,
   provisionInstitutionalIdentity,
   provisioningErrorCodes,
@@ -108,6 +123,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "account-lifecycle.js",
     "auth-session.js",
     "institutional-access.js",
+    "nip-security.js",
     "admin-contract.js",
     "browser.js",
     "config.js",
@@ -368,6 +384,10 @@ test("institutional-access falla al importarse desde un Client Component", async
   await expectClientBuildFailure("institutional-access");
 });
 
+test("nip-security falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("nip-security");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
@@ -376,6 +396,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "account-lifecycle",
     "auth-session",
     "institutional-access",
+    "nip-security",
   ]) {
     const script = `globalThis.window={};import('./dist/${moduleName}.js').catch((error)=>{console.error(error.message);process.exit(1)})`;
     const result = spawnSync(
@@ -424,6 +445,11 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
     "utf8",
   );
   assert.doesNotMatch(institutionalAccessSource, /SupabaseClient|service_role|process\.env/);
+  const nipSecuritySource = await readFile(
+    new URL("../src/nip-security.ts", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(nipSecuritySource, /SupabaseClient|service_role|process\.env/);
 });
 
 function fakeAuthService({ context, signInError = false, user = { id: "auth-user" } } = {}) {
@@ -460,6 +486,9 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
           async signOut() {
             signOutCalls += 1;
             return { error: null };
+          },
+          async updateUser() {
+            return { data: {}, error: null };
           },
         },
         async rpc() {
@@ -505,6 +534,9 @@ test("getClaims valida cada solicitud y setAll conserva cookies, opciones y head
             async signOut() {
               return { error: null };
             },
+            async updateUser() {
+              return { data: {}, error: null };
+            },
           },
           async rpc() {
             return { data: [], error: null };
@@ -543,6 +575,9 @@ test("SSR permite localhost sin Secure y exige Secure para HTTPS", () => {
           },
           async signOut() {
             return { error: null };
+          },
+          async updateUser() {
+            return { data: {}, error: null };
           },
         },
         async rpc() {
@@ -1028,6 +1063,273 @@ test("el servicio de ciclo de vida delega comandos tipados sin red", async () =>
   });
   assert.deepEqual(result, expected);
   assert.equal(calls, 1);
+});
+
+test("catálogos y máquina de estados de seguridad NIP son cerrados", () => {
+  assert.deepEqual(nipRecoveryStatuses, [
+    "REQUESTED",
+    "APPROVED",
+    "READY_FOR_RESET",
+    "CONSUMED",
+    "EXPIRED",
+    "CANCELLED",
+    "RETRYABLE_FAILURE",
+    "TERMINAL_FAILURE",
+    "RECONCILIATION_REQUIRED",
+  ]);
+  assert.equal(nipSecurityEventTypes.length, 16);
+  assert.equal(nipSecurityReasonCodes.length, 10);
+  assert.equal(nipSecurityErrorCodes.length, 21);
+  assert.deepEqual(nipAbuseCategories, [
+    "CHANGE_NIP",
+    "REQUEST_RECOVERY",
+    "RESET_NIP",
+    "VALIDATE_RESET_TOKEN",
+  ]);
+  assert.deepEqual(nipRecoveryAdministrativeRoles, {
+    FULL: ["SUPERADMIN", "ADMINISTRATIVO"],
+    REQUEST_SCHOOL_IDENTITIES: ["CONTROL_ESCOLAR"],
+  });
+  assert.equal(isValidNipRecoveryTransition("REQUESTED", "APPROVED"), true);
+  assert.equal(isValidNipRecoveryTransition("READY_FOR_RESET", "CONSUMED"), true);
+  assert.equal(isValidNipRecoveryTransition("CONSUMED", "READY_FOR_RESET"), false);
+  assert.equal(isValidNipRecoveryTransition("REQUESTED", "CONSUMED"), false);
+});
+
+test("token de restablecimiento es aleatorio, opaco y usa comparación constante", () => {
+  const secret = "synthetic-token-secret-with-at-least-32-characters";
+  const first = generateNipResetToken();
+  const second = generateNipResetToken();
+  assert.notEqual(first, second);
+  assert.ok(first.length >= 43);
+  const digest = digestNipResetToken(first, secret);
+  assert.match(digest, /^[a-f0-9]{64}$/);
+  assert.equal(safeTokenDigestEquals(digest, digest), true);
+  assert.equal(safeTokenDigestEquals(digest, digestNipResetToken(second, secret)), false);
+  assert.doesNotMatch(digest, new RegExp(first));
+  assert.notEqual(
+    createNipAbuseKey({
+      category: "RESET_NIP",
+      opaqueSubject: "synthetic-subject",
+      salt: secret,
+    }),
+    createNipAbuseKey({
+      category: "CHANGE_NIP",
+      opaqueSubject: "synthetic-subject",
+      salt: secret,
+    }),
+  );
+});
+
+test("cambio autenticado revalida contexto, actualiza y revoca otras sesiones", async () => {
+  const events = [];
+  const credentials = [];
+  const result = await changeAuthenticatedNip(
+    {
+      application: "PORTAL_ESCOLAR",
+      confirmation: "009988",
+      correlationId: "00000000-0000-4000-8000-000000000101",
+      currentNip: "001122",
+      idempotencyKey: "change:synthetic:0001",
+      newNip: "009988",
+    },
+    {
+      audit: { record: async (event) => events.push(event) },
+      auth: {
+        async revokeOtherSessions() {
+          return { ok: true };
+        },
+        async updateAuthenticatedPassword(input) {
+          credentials.push(input);
+          return { ok: true };
+        },
+      },
+      async getIdentity() {
+        return {
+          identity: {
+            context: {
+              accountId: "account",
+              accountStatus: "ACTIVE",
+              allowedApplications: ["PORTAL_ESCOLAR"],
+              authUserId: "auth",
+              personId: "person",
+              roleCodes: ["ALUMNO"],
+            },
+            userId: "auth",
+          },
+          ok: true,
+        };
+      },
+    },
+  );
+  assert.deepEqual(result, { changed: true, otherSessionsRevoked: true });
+  assert.equal(events.length, 3);
+  assert.deepEqual(credentials, [{ currentPassword: "001122", newPassword: "009988" }]);
+  assert.doesNotMatch(JSON.stringify(result), /001122|009988|password|token|alias/i);
+});
+
+test("cambio autenticado rechaza confirmación, reutilización, estado y NIP actual", async () => {
+  const base = {
+    application: "PORTAL_ESCOLAR",
+    confirmation: "009988",
+    correlationId: "00000000-0000-4000-8000-000000000102",
+    currentNip: "001122",
+    idempotencyKey: "change:synthetic:0002",
+    newNip: "009988",
+  };
+  const activeIdentity = async () => ({
+    identity: {
+      context: {
+        accountId: "account",
+        accountStatus: "ACTIVE",
+        allowedApplications: ["PORTAL_ESCOLAR"],
+        authUserId: "auth",
+        personId: "person",
+        roleCodes: ["ALUMNO"],
+      },
+      userId: "auth",
+    },
+    ok: true,
+  });
+  const dependency = {
+    audit: { record: async () => undefined },
+    auth: {
+      revokeOtherSessions: async () => ({ ok: false }),
+      updateAuthenticatedPassword: async () => ({ ok: false }),
+    },
+    getIdentity: activeIdentity,
+  };
+  await assert.rejects(
+    changeAuthenticatedNip({ ...base, confirmation: "008877" }, dependency),
+    (error) => error.code === "NIP_CONFIRMATION_MISMATCH",
+  );
+  await assert.rejects(
+    changeAuthenticatedNip({ ...base, newNip: "001122", confirmation: "001122" }, dependency),
+    (error) => error.code === "NIP_REUSE_NOT_ALLOWED",
+  );
+  await assert.rejects(
+    changeAuthenticatedNip(base, dependency),
+    (error) => error.code === "INVALID_CURRENT_NIP",
+  );
+  await assert.rejects(
+    changeAuthenticatedNip(base, {
+      ...dependency,
+      getIdentity: async () => ({
+        identity: {
+          context: {
+            accountId: "account",
+            accountStatus: "SUSPENDED",
+            allowedApplications: [],
+            authUserId: "auth",
+            personId: "person",
+            roleCodes: [],
+          },
+          userId: "auth",
+        },
+        ok: true,
+      }),
+    }),
+    (error) => error.code === "ACCOUNT_NOT_ACTIVE",
+  );
+});
+
+test("restablecimiento consume una sola vez y deriva reconciliación ante resultado incierto", async () => {
+  const token = generateNipResetToken();
+  const secret = "synthetic-token-secret-with-at-least-32-characters";
+  const digest = digestNipResetToken(token, secret);
+  const calls = [];
+  const attempts = createInMemoryAuthenticationAttemptGuard();
+  const persistence = {
+    async completeReset(input) {
+      calls.push(["complete", input]);
+      return { accountId: "account", id: "recovery", personId: "person", status: "CONSUMED" };
+    },
+    async markReconciliationRequired(input) {
+      calls.push(["reconcile", input]);
+      return {
+        accountId: "account",
+        id: "recovery",
+        personId: "person",
+        status: "RECONCILIATION_REQUIRED",
+      };
+    },
+    async markResetAttempt(value) {
+      assert.equal(value, digest);
+      return {
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        id: "authorization",
+        recoveryRequestId: "recovery",
+      };
+    },
+    async markResetFailure(input) {
+      calls.push(["failure", input]);
+      return {
+        accountId: "account",
+        id: "recovery",
+        personId: "person",
+        status: "RETRYABLE_FAILURE",
+      };
+    },
+    async resolveAuthorization(value) {
+      assert.equal(value, digest);
+      return {
+        accountId: "account",
+        authorization: {
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          id: "authorization",
+          recoveryRequestId: "recovery",
+        },
+        personId: "person",
+        recovery: {
+          accountId: "account",
+          id: "recovery",
+          personId: "person",
+          status: "READY_FOR_RESET",
+        },
+      };
+    },
+  };
+  const result = await resetNipWithAuthorization(
+    {
+      confirmation: "001234",
+      idempotencyKey: "reset:synthetic:0001",
+      newNip: "001234",
+      token,
+      tokenSecret: secret,
+    },
+    {
+      attempts,
+      auth: {
+        revokeAllSessions: async () => ({ confirmed: false }),
+        updatePasswordForAccount: async () => ({ outcome: "SUCCESS" }),
+      },
+      persistence,
+    },
+  );
+  assert.deepEqual(result, { reset: true, sessionsRevoked: false });
+  assert.equal(calls[0][0], "complete");
+  await assert.rejects(
+    resetNipWithAuthorization(
+      {
+        confirmation: "006789",
+        idempotencyKey: "reset:synthetic:0002",
+        newNip: "006789",
+        token,
+        tokenSecret: secret,
+      },
+      {
+        attempts,
+        auth: {
+          revokeAllSessions: async () => ({ confirmed: false }),
+          updatePasswordForAccount: async () => ({ outcome: "UNKNOWN" }),
+        },
+        persistence,
+      },
+    ),
+    (error) => error.code === "RECONCILIATION_REQUIRED",
+  );
+  assert.equal(calls.at(-1)[0], "reconcile");
+  assert.doesNotMatch(JSON.stringify(result), /001234|token|digest|password|alias/i);
 });
 
 test("normaliza fallos del puerto y conserva errores cerrados", async () => {
