@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  15,
-  "Fase 3 Bloque 2 debe conservar once migraciones históricas y añadir cuatro académicas",
+  16,
+  "Fase 3 Bloque 3 debe conservar quince migraciones históricas y añadir horarios",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -96,7 +96,7 @@ function rolesForApplication(application) {
   return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
 }
 
-test("las quince migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las dieciséis migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);

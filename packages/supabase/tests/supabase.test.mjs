@@ -25,6 +25,17 @@ import {
   validateSemesterNumber,
 } from "../dist/academic-structure.js";
 import {
+  AcademicSchedulingError,
+  academicSchedulingCommands,
+  academicSchedulingErrorCodes,
+  academicSchedulingOperations,
+  academicSchedulingSqlFunctions,
+  normalizeScheduleCode,
+  validateGroupScheduleCoverage,
+  validateIsoWeekday,
+  validateTimeValue,
+} from "../dist/academic-scheduling.js";
+import {
   StudentEnrollmentError,
   createEnrollmentRequest,
   normalizeInstitutionalStudentCode,
@@ -182,6 +193,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
     "academic-structure.js",
+    "academic-scheduling.js",
     "auth-session.js",
     "institutional-access.js",
     "mfa-administration.js",
@@ -526,6 +538,10 @@ test("academic-structure falla al importarse desde un Client Component", async (
   await expectClientBuildFailure("academic-structure");
 });
 
+test("academic-scheduling falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("academic-scheduling");
+});
+
 test("student-enrollment falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("student-enrollment");
 });
@@ -537,6 +553,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "provisioning",
     "account-lifecycle",
     "academic-structure",
+    "academic-scheduling",
     "student-enrollment",
     "auth-session",
     "institutional-access",
@@ -2017,5 +2034,68 @@ test("servicio de inscripción usa puerto inyectable y resultado mínimo", async
     status: "DRAFT",
   });
   assert.equal(calls[0].sqlFunction, "academic.create_enrollment_request");
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+
+test("contrato de horarios valida entradas y mantiene catálogos cerrados", () => {
+  assert.equal(normalizeScheduleCode("  schedule_01 "), "SCHEDULE_01");
+  assert.equal(validateIsoWeekday(1), 1);
+  assert.equal(validateIsoWeekday(7), 7);
+  assert.equal(validateTimeValue("07:00"), "07:00");
+  assert.throws(
+    () => validateIsoWeekday(0),
+    (error) =>
+      error instanceof AcademicSchedulingError && error.code === "TEMPLATE_BLOCK_NOT_ALLOWED",
+  );
+  assert.throws(() => validateTimeValue("24:00"), AcademicSchedulingError);
+  assert.equal(new Set(academicSchedulingErrorCodes).size, academicSchedulingErrorCodes.length);
+  assert.deepEqual(Object.keys(academicSchedulingSqlFunctions), [...academicSchedulingOperations]);
+  assert.deepEqual(Object.keys(academicSchedulingCommands), [...academicSchedulingOperations]);
+  assert.doesNotMatch(
+    JSON.stringify({ academicSchedulingCommands, academicSchedulingSqlFunctions }),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio de horarios usa puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-shift", operation: command.operation, status: "DRAFT" };
+    },
+    getTeacherWorkload: async () => ({
+      activeSessionCount: 0,
+      conflictCount: 0,
+      distributionByDay: {},
+      groupCount: 0,
+      offeringCount: 0,
+      plannedSessionCount: 0,
+      weeklyMinutes: 0,
+      weeklySessionCount: 0,
+    }),
+    validateCoverage: async () => ({
+      conflictCount: 0,
+      invalidSessionCount: 0,
+      missingOfferingCount: 0,
+      valid: true,
+    }),
+  };
+  const result = await academicSchedulingCommands.CREATE_ACADEMIC_SHIFT(
+    { idempotencyKey: "SYNTHETIC_SHIFT_01", input: { code: "SHIFT_01" } },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-shift",
+    operation: "CREATE_ACADEMIC_SHIFT",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_academic_shift");
+  assert.deepEqual(await validateGroupScheduleCoverage("synthetic-schedule", port), {
+    conflictCount: 0,
+    invalidSessionCount: 0,
+    missingOfferingCount: 0,
+    valid: true,
+  });
   assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
 });

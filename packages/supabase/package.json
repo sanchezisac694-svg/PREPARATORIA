@@ -12,6 +12,10 @@
       "types": "./src/academic-structure.ts",
       "default": "./dist/academic-structure.js"
     },
+    "./academic-scheduling": {
+      "types": "./src/academic-scheduling.ts",
+      "default": "./dist/academic-scheduling.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
