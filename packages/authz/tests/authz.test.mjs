@@ -40,11 +40,78 @@ const expectedRoles = [
   "CAJA",
   "CONTROL_ESCOLAR",
   "DOCENTE",
+  "PREFECTURA",
   "SUPERADMIN",
   "TUTOR",
 ];
 
 const expectedPermissions = [
+  "academic.assignments.manage",
+  "academic.assignments.read",
+  "academic.attendance.manage",
+  "academic.attendance.read",
+  "academic.attendance.validate",
+  "academic.cycles.manage",
+  "academic.cycles.read",
+  "academic.enrollment_requests.manage",
+  "academic.enrollment_requests.read",
+  "academic.enrollments.manage",
+  "academic.enrollments.read",
+  "academic.generations.manage",
+  "academic.generations.read",
+  "academic.grade_windows.manage",
+  "academic.grades.capture",
+  "academic.grades.correct",
+  "academic.grades.finalize",
+  "academic.grades.read",
+  "academic.grades.review",
+  "academic.group_assignments.manage",
+  "academic.group_assignments.read",
+  "academic.groups.manage",
+  "academic.groups.read",
+  "academic.lateness.notifications.record",
+  "academic.lateness.read",
+  "academic.lateness.validate",
+  "academic.offerings.manage",
+  "academic.offerings.read",
+  "academic.periods.manage",
+  "academic.periods.read",
+  "academic.permissions.manage",
+  "academic.permissions.read",
+  "academic.permissions.validate",
+  "academic.plans.approve",
+  "academic.plans.manage",
+  "academic.plans.read",
+  "academic.progress.manage",
+  "academic.progress.read",
+  "academic.progress_decisions.confirm",
+  "academic.schedule_changes.approve",
+  "academic.schedule_changes.manage",
+  "academic.schedule_templates.manage",
+  "academic.schedule_templates.read",
+  "academic.schedules.approve",
+  "academic.schedules.manage",
+  "academic.schedules.publish",
+  "academic.schedules.read",
+  "academic.semester_evaluations.calculate",
+  "academic.semester_evaluations.read",
+  "academic.shifts.manage",
+  "academic.shifts.read",
+  "academic.spaces.manage",
+  "academic.spaces.read",
+  "academic.students.manage",
+  "academic.students.read",
+  "academic.subject_results.calculate",
+  "academic.subject_results.confirm",
+  "academic.subject_results.read",
+  "academic.subjects.manage",
+  "academic.subjects.read",
+  "academic.teacher_availability.manage",
+  "academic.teacher_availability.read",
+  "academic.time_blocks.manage",
+  "academic.time_blocks.read",
+  "academic.withdrawals.manage",
+  "academic.workload.read",
   "academics.manage",
   "academics.read",
   "admissions.manage",
@@ -474,6 +541,7 @@ test("los accesos por aplicación están enumerados y congelados", () => {
     roles.SUPERADMIN,
     roles.ADMINISTRATIVO,
     roles.CONTROL_ESCOLAR,
+    roles.PREFECTURA,
     roles.CAJA,
   ]);
   assert.equal(Object.isFrozen(applicationRoleMap), true);
@@ -519,4 +587,23 @@ test("el paquete no depende de aplicaciones, Supabase, Next.js, React o UI", asy
 test("las pruebas no contienen datos personales reales", async () => {
   const source = await readFile(new URL(import.meta.url), "utf8");
   assert.doesNotMatch(source, /[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d|[\w.+-]+@[\w.-]+\.\w+/);
+});
+
+test("permisos de inscripción respetan baja definitiva y roles no administrativos", () => {
+  assert.equal(hasPermission([roles.SUPERADMIN], permissions.ACADEMIC_WITHDRAWALS_MANAGE), true);
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.ACADEMIC_WITHDRAWALS_MANAGE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.ACADEMIC_ENROLLMENTS_MANAGE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.ACADEMIC_WITHDRAWALS_MANAGE),
+    false,
+  );
+  for (const role of [roles.CAJA, roles.DOCENTE, roles.TUTOR, roles.ALUMNO, roles.ASPIRANTE]) {
+    assert.equal(hasPermission([role], permissions.ACADEMIC_ENROLLMENTS_MANAGE), false);
+  }
 });

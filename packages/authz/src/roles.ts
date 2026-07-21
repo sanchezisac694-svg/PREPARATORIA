@@ -5,6 +5,7 @@ export const roles = Object.freeze({
   CAJA: "CAJA",
   CONTROL_ESCOLAR: "CONTROL_ESCOLAR",
   DOCENTE: "DOCENTE",
+  PREFECTURA: "PREFECTURA",
   SUPERADMIN: "SUPERADMIN",
   TUTOR: "TUTOR",
 } as const);
@@ -24,6 +25,7 @@ export const roleLabels = Object.freeze({
   [roles.CAJA]: "Caja",
   [roles.CONTROL_ESCOLAR]: "Control escolar",
   [roles.DOCENTE]: "Docente",
+  [roles.PREFECTURA]: "Prefectura",
   [roles.SUPERADMIN]: "Superadministrador",
   [roles.TUTOR]: "Tutor",
 }) satisfies Readonly<Record<Role, string>>;

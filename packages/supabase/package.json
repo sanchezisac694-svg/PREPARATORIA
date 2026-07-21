@@ -8,6 +8,22 @@
       "types": "./src/admin-contract.ts",
       "default": "./dist/admin-contract.js"
     },
+    "./academic-structure": {
+      "types": "./src/academic-structure.ts",
+      "default": "./dist/academic-structure.js"
+    },
+    "./academic-scheduling": {
+      "types": "./src/academic-scheduling.ts",
+      "default": "./dist/academic-scheduling.js"
+    },
+    "./attendance-management": {
+      "types": "./src/attendance-management.ts",
+      "default": "./dist/attendance-management.js"
+    },
+    "./grade-management": {
+      "types": "./src/grade-management.ts",
+      "default": "./dist/grade-management.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
@@ -47,6 +63,10 @@
     "./session-security": {
       "types": "./src/session-security.ts",
       "default": "./dist/session-security.js"
+    },
+    "./student-enrollment": {
+      "types": "./src/student-enrollment.ts",
+      "default": "./dist/student-enrollment.js"
     },
     "./ssr": {
       "types": "./src/ssr.ts",

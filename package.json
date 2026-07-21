@@ -15,8 +15,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && pnpm test:schema",
     "test:schema": "pnpm --filter @preparatoria/authz build && node --test supabase/tests/identity-schema.test.mjs",
-    "format": "prettier --write package.json pnpm-workspace.yaml turbo.json tsconfig.json eslint.config.mjs prettier.config.mjs README.md \".github/**/*.{mjs,yml,yaml}\" \"apps/**/*.{json,ts,tsx,css,mjs}\" \"packages/**/*.{json,ts,tsx,css,mjs}\" \"supabase/**/*.mjs\" \"docs/fase-{1,2}/*.md\" \"!apps/**/next-env.d.ts\"",
-    "format:check": "prettier --check package.json pnpm-workspace.yaml turbo.json tsconfig.json eslint.config.mjs prettier.config.mjs README.md \".github/**/*.{mjs,yml,yaml}\" \"apps/**/*.{json,ts,tsx,css,mjs}\" \"packages/**/*.{json,ts,tsx,css,mjs}\" \"supabase/**/*.mjs\" \"docs/fase-{1,2}/*.md\" \"!apps/**/next-env.d.ts\""
+    "format": "prettier --write package.json pnpm-workspace.yaml turbo.json tsconfig.json eslint.config.mjs prettier.config.mjs README.md \".github/**/*.{mjs,yml,yaml}\" \"apps/**/*.{json,ts,tsx,css,mjs}\" \"packages/**/*.{json,ts,tsx,css,mjs}\" \"supabase/**/*.mjs\" \"docs/fase-{1,2,3}/*.md\" \"!apps/**/next-env.d.ts\"",
+    "format:check": "prettier --check package.json pnpm-workspace.yaml turbo.json tsconfig.json eslint.config.mjs prettier.config.mjs README.md \".github/**/*.{mjs,yml,yaml}\" \"apps/**/*.{json,ts,tsx,css,mjs}\" \"packages/**/*.{json,ts,tsx,css,mjs}\" \"supabase/**/*.mjs\" \"docs/fase-{1,2,3}/*.md\" \"!apps/**/next-env.d.ts\""
   },
   "devDependencies": {
     "eslint": "10.7.0",

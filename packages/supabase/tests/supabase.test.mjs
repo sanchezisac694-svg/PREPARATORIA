@@ -16,6 +16,57 @@ import {
   safeAccountLifecycleDiagnostic,
 } from "../dist/account-lifecycle.js";
 import {
+  AcademicStructureError,
+  academicStructureErrorCodes,
+  academicSqlFunctions,
+  academicStructureOperations,
+  createGroup,
+  normalizeAcademicCode,
+  validateSemesterNumber,
+} from "../dist/academic-structure.js";
+import {
+  AcademicSchedulingError,
+  academicSchedulingCommands,
+  academicSchedulingErrorCodes,
+  academicSchedulingOperations,
+  academicSchedulingSqlFunctions,
+  normalizeScheduleCode,
+  validateGroupScheduleCoverage,
+  validateIsoWeekday,
+  validateTimeValue,
+} from "../dist/academic-scheduling.js";
+import {
+  AttendanceManagementError,
+  attendanceManagementCommands,
+  attendanceManagementErrorCodes,
+  attendanceManagementOperations,
+  attendanceManagementSqlFunctions,
+  attendanceSessionStatuses,
+  attendanceStatuses,
+  validateAttendanceDate,
+  validateLatenessMinutes,
+} from "../dist/attendance-management.js";
+import {
+  GradeManagementError,
+  gradeCalculationStatuses,
+  gradeManagementCommands,
+  gradeManagementErrorCodes,
+  gradeManagementOperations,
+  gradeWindowStatuses,
+  subjectResultCodes,
+  unitGradeStatuses,
+  validateGradeDecimal,
+} from "../dist/grade-management.js";
+import {
+  StudentEnrollmentError,
+  createEnrollmentRequest,
+  normalizeInstitutionalStudentCode,
+  studentEnrollmentErrorCodes,
+  studentEnrollmentOperations,
+  studentEnrollmentSqlFunctions,
+  validateStudentSemester,
+} from "../dist/student-enrollment.js";
+import {
   createAuthenticationService,
   evaluateApplicationAccess,
   safeInternalRedirect,
@@ -163,6 +214,10 @@ async function linkFixtureDependencies(fixtureDirectory) {
 
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
+    "academic-structure.js",
+    "academic-scheduling.js",
+    "attendance-management.js",
+    "grade-management.js",
     "auth-session.js",
     "institutional-access.js",
     "mfa-administration.js",
@@ -174,6 +229,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "config.js",
     "provisioning.js",
     "session-security.js",
+    "student-enrollment.js",
     "ssr.js",
     "types.js",
   ];
@@ -502,12 +558,37 @@ test("mfa-administration-local falla al importarse desde un Client Component", a
   await expectClientBuildFailure("mfa-administration-local");
 });
 
+test("academic-structure falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("academic-structure");
+});
+
+test("academic-scheduling falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("academic-scheduling");
+});
+
+test("attendance-management falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("attendance-management");
+});
+
+test("grade-management falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("grade-management");
+});
+
+test("student-enrollment falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("student-enrollment");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
     "admin-contract",
     "provisioning",
     "account-lifecycle",
+    "academic-structure",
+    "academic-scheduling",
+    "attendance-management",
+    "grade-management",
+    "student-enrollment",
     "auth-session",
     "institutional-access",
     "nip-security",
@@ -523,7 +604,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
       },
     );
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /solo puede importarse desde el servidor/);
+    assert.match(result.stderr, /solo puede importarse desde (?:el )?servidor/);
   }
 });
 
@@ -1889,4 +1970,327 @@ test("catálogos, digests y protección de abuso administrativa son cerrados", (
     target: "sensitive-target",
   });
   assert.doesNotMatch(key, /sensitive/);
+});
+
+test("contrato académico normaliza códigos y limita semestres", () => {
+  assert.equal(normalizeAcademicCode("  synthetic_01 "), "SYNTHETIC_01");
+  assert.equal(validateSemesterNumber(1), 1);
+  assert.equal(validateSemesterNumber(6), 6);
+  assert.throws(
+    () => validateSemesterNumber(0),
+    (error) => error instanceof AcademicStructureError && error.code === "INVALID_SEMESTER_NUMBER",
+  );
+  assert.throws(() => validateSemesterNumber(7), AcademicStructureError);
+  assert.equal(new Set(academicStructureErrorCodes).size, academicStructureErrorCodes.length);
+  assert.equal(academicStructureOperations.length, 38);
+  assert.deepEqual(Object.keys(academicSqlFunctions), [...academicStructureOperations]);
+  assert.equal(
+    academicSqlFunctions.BEGIN_ACADEMIC_PERIOD_CLOSING,
+    "academic.begin_academic_period_closing",
+  );
+  assert.equal(
+    academicSqlFunctions.ACTIVATE_TEACHING_ASSIGNMENT,
+    "academic.activate_teaching_assignment",
+  );
+  assert.doesNotMatch(
+    JSON.stringify(academicSqlFunctions),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio académico usa un puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-group", operation: command.operation, status: "DRAFT" };
+    },
+    summary: async () => ({
+      activeCycleCount: 0,
+      activeGroupCount: 0,
+      activePeriodCount: 0,
+      activePlanCount: 0,
+    }),
+  };
+  const result = await createGroup(
+    {
+      idempotencyKey: "SYNTHETIC_GROUP_01",
+      input: { code: "SYNTHETIC_GROUP_01", semesterNumber: 5 },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-group",
+    operation: "CREATE_GROUP",
+    status: "DRAFT",
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].sqlFunction, "academic.create_group");
+  assert.doesNotMatch(JSON.stringify(result), /email|token|nip|SupabaseClient/i);
+});
+
+test("contrato de inscripción conserva ceros y limita semestres", () => {
+  assert.equal(normalizeInstitutionalStudentCode(" 001234 "), "001234");
+  assert.equal(validateStudentSemester(1), 1);
+  assert.equal(validateStudentSemester(6), 6);
+  assert.throws(
+    () => validateStudentSemester(7),
+    (error) => error instanceof StudentEnrollmentError && error.code === "INVALID_SEMESTER_NUMBER",
+  );
+  assert.equal(new Set(studentEnrollmentErrorCodes).size, studentEnrollmentErrorCodes.length);
+  assert.equal(studentEnrollmentOperations.length, 31);
+  assert.deepEqual(Object.keys(studentEnrollmentSqlFunctions), [...studentEnrollmentOperations]);
+  assert.doesNotMatch(
+    JSON.stringify(studentEnrollmentSqlFunctions),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio de inscripción usa puerto inyectable y resultado mínimo", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-request", operation: command.operation, status: "DRAFT" };
+    },
+    validateCoverage: async () => ({ complete: true, expectedCount: 2, offeredCount: 2 }),
+  };
+  const result = await createEnrollmentRequest(
+    {
+      idempotencyKey: "SYNTHETIC_REQUEST_01",
+      input: { semesterNumber: 1, studentRecordId: "synthetic-record" },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-request",
+    operation: "CREATE_ENROLLMENT_REQUEST",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_enrollment_request");
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+
+test("contrato de calificaciones conserva catálogos y decimales cerrados", () => {
+  assert.deepEqual(gradeWindowStatuses, ["DRAFT", "OPEN", "CLOSED", "CANCELLED"]);
+  assert.deepEqual(unitGradeStatuses, [
+    "DRAFT",
+    "CAPTURED",
+    "REVIEWED",
+    "FINALIZED",
+    "CORRECTED",
+    "CANCELLED",
+  ]);
+  assert.deepEqual(subjectResultCodes, ["AC", "NA", "PENDING"]);
+  assert.deepEqual(gradeCalculationStatuses, ["COMPLETE", "INCOMPLETE", "MANUAL_REVIEW_REQUIRED"]);
+  assert.equal(validateGradeDecimal("0.000"), "0.000");
+  assert.equal(validateGradeDecimal("5.95"), "5.95");
+  assert.equal(validateGradeDecimal("10.0"), "10.0");
+  for (const invalid of ["-1", "10.001", "6.1234", " 6", "NaN"]) {
+    assert.throws(() => validateGradeDecimal(invalid), GradeManagementError);
+  }
+  assert.equal(new Set(gradeManagementErrorCodes).size, gradeManagementErrorCodes.length);
+  assert.deepEqual(Object.keys(gradeManagementCommands), [...gradeManagementOperations]);
+  assert.doesNotMatch(
+    JSON.stringify(gradeManagementCommands),
+    /actorAccountId|sessionVersion|fingerprint|normalizedGrade|resultCode|SupabaseClient/,
+  );
+});
+
+test("servicio de calificaciones usa puerto inyectable y resultado mínimo", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-grade", status: "CAPTURED" };
+    },
+  };
+  const result = await gradeManagementCommands.CAPTURE_STUDENT_UNIT_GRADE(
+    {
+      idempotencyKey: "SYNTHETIC_GRADE_01",
+      input: { rawGrade: "6.25", subjectUnitId: "synthetic-unit" },
+    },
+    port,
+  );
+  assert.deepEqual(result, { entityId: "synthetic-grade", status: "CAPTURED" });
+  assert.equal(calls[0].sqlFunction, "academic.capture_student_unit_grade");
+});
+
+test("confirmaciones y correcciones conservan idempotencia y respuestas mínimas", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-entity", status: "COMPLETED" };
+    },
+  };
+  for (const operation of [
+    "CONFIRM_SUBJECT_FINAL_RESULT",
+    "CONFIRM_SEMESTER_PROGRESS_DECISION",
+    "APPROVE_GRADE_CORRECTION",
+    "APPLY_GRADE_CORRECTION",
+  ]) {
+    const result = await gradeManagementCommands[operation](
+      { idempotencyKey: `KEY_${operation}`, input: { entityId: "synthetic-entity" } },
+      port,
+    );
+    assert.deepEqual(result, { entityId: "synthetic-entity", status: "COMPLETED" });
+  }
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((command) => command.idempotencyKey.startsWith("KEY_")));
+  assert.doesNotMatch(JSON.stringify(calls), /actorAccountId|sessionVersion|aal|fingerprint/i);
+});
+
+test("captura interna por lote conserva un único comando atómico", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-batch", status: "CAPTURED" };
+    },
+  };
+  await gradeManagementCommands.CAPTURE_BULK_UNIT_GRADES(
+    {
+      idempotencyKey: "SYNTHETIC_BATCH_01",
+      input: {
+        items: [
+          { offeringEnrollmentId: "offering-1", subjectUnitId: "unit-1", rawGrade: "6.25" },
+          { offeringEnrollmentId: "offering-1", subjectUnitId: "unit-2", rawGrade: "7.50" },
+        ],
+      },
+    },
+    port,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].sqlFunction, "academic.capture_bulk_unit_grades");
+  assert.equal(calls[0].input.items.length, 2);
+});
+
+test("contrato de horarios valida entradas y mantiene catálogos cerrados", () => {
+  assert.equal(normalizeScheduleCode("  schedule_01 "), "SCHEDULE_01");
+  assert.equal(validateIsoWeekday(1), 1);
+  assert.equal(validateIsoWeekday(7), 7);
+  assert.equal(validateTimeValue("07:00"), "07:00");
+  assert.throws(
+    () => validateIsoWeekday(0),
+    (error) =>
+      error instanceof AcademicSchedulingError && error.code === "TEMPLATE_BLOCK_NOT_ALLOWED",
+  );
+  assert.throws(() => validateTimeValue("24:00"), AcademicSchedulingError);
+  assert.equal(new Set(academicSchedulingErrorCodes).size, academicSchedulingErrorCodes.length);
+  assert.deepEqual(Object.keys(academicSchedulingSqlFunctions), [...academicSchedulingOperations]);
+  assert.deepEqual(Object.keys(academicSchedulingCommands), [...academicSchedulingOperations]);
+  assert.doesNotMatch(
+    JSON.stringify({ academicSchedulingCommands, academicSchedulingSqlFunctions }),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient/,
+  );
+});
+
+test("servicio de horarios usa puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-shift", operation: command.operation, status: "DRAFT" };
+    },
+    getTeacherWorkload: async () => ({
+      activeSessionCount: 0,
+      conflictCount: 0,
+      distributionByDay: {},
+      groupCount: 0,
+      offeringCount: 0,
+      plannedSessionCount: 0,
+      weeklyMinutes: 0,
+      weeklySessionCount: 0,
+    }),
+    validateCoverage: async () => ({
+      conflictCount: 0,
+      invalidSessionCount: 0,
+      missingOfferingCount: 0,
+      valid: true,
+    }),
+  };
+  const result = await academicSchedulingCommands.CREATE_ACADEMIC_SHIFT(
+    { idempotencyKey: "SYNTHETIC_SHIFT_01", input: { code: "SHIFT_01" } },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-shift",
+    operation: "CREATE_ACADEMIC_SHIFT",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_academic_shift");
+  assert.deepEqual(await validateGroupScheduleCoverage("synthetic-schedule", port), {
+    conflictCount: 0,
+    invalidSessionCount: 0,
+    missingOfferingCount: 0,
+    valid: true,
+  });
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+
+test("contrato de asistencia mantiene estados, fechas y minutos cerrados", () => {
+  assert.deepEqual(attendanceStatuses, ["NOT_RECORDED", "PRESENT", "ABSENT", "LATE", "EXCUSED"]);
+  assert.deepEqual(attendanceSessionStatuses, ["DRAFT", "OPEN", "CLOSED", "CANCELLED", "LOCKED"]);
+  assert.equal(validateAttendanceDate("2095-03-14"), "2095-03-14");
+  assert.equal(validateLatenessMinutes("LATE", 4), 4);
+  assert.equal(validateLatenessMinutes("PRESENT", null), null);
+  assert.throws(
+    () => validateLatenessMinutes("LATE", 0),
+    (error) =>
+      error instanceof AttendanceManagementError && error.code === "LATENESS_MINUTES_REQUIRED",
+  );
+  assert.throws(
+    () => validateLatenessMinutes("ABSENT", 1),
+    (error) =>
+      error instanceof AttendanceManagementError && error.code === "LATENESS_MINUTES_NOT_ALLOWED",
+  );
+  assert.equal(new Set(attendanceManagementErrorCodes).size, attendanceManagementErrorCodes.length);
+  assert.deepEqual(Object.keys(attendanceManagementSqlFunctions), [
+    ...attendanceManagementOperations,
+  ]);
+  assert.deepEqual(Object.keys(attendanceManagementCommands), [...attendanceManagementOperations]);
+  assert.doesNotMatch(
+    JSON.stringify({ attendanceManagementCommands, attendanceManagementSqlFunctions }),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient|email|name|token|nip/,
+  );
+});
+
+test("servicio de asistencia usa puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-session", operation: command.operation, status: "DRAFT" };
+    },
+    getSessionSummary: async () => ({
+      absentCount: 0,
+      excusedCount: 0,
+      expectedCount: 1,
+      lateCount: 0,
+      notRecordedCount: 1,
+      presentCount: 0,
+      recordedCount: 0,
+    }),
+    getStudentLatenessSummary: async () => ({
+      alertSequence: 0,
+      currentCount: 0,
+      lifetimeCount: 0,
+      pendingAlertCount: 0,
+    }),
+  };
+  const result = await attendanceManagementCommands.CREATE_ATTENDANCE_SESSION(
+    {
+      idempotencyKey: "SYNTHETIC_ATTENDANCE_01",
+      input: { classSessionId: "synthetic-class", sessionDate: "2095-03-14" },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-session",
+    operation: "CREATE_ATTENDANCE_SESSION",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_attendance_session");
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
 });

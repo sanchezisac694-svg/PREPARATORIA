@@ -113,6 +113,7 @@ const requirementByRole: Readonly<Record<Role, MfaRequirement>> = Object.freeze(
   SUPERADMIN: "REQUIRED",
   ADMINISTRATIVO: "REQUIRED",
   CONTROL_ESCOLAR: "REQUIRED",
+  PREFECTURA: "REQUIRED",
   CAJA: "REQUIRED",
   DOCENTE: "RECOMMENDED",
   TUTOR: "OPTIONAL",
