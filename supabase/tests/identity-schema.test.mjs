@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  17,
-  "Fase 3 Bloque 4 debe conservar dieciséis migraciones históricas y añadir asistencia",
+  19,
+  "Fase 3 Bloque 5 debe conservar diecisiete migraciones históricas y añadir base más endurecimiento",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -46,6 +46,11 @@ const mfaAdministrationMigration = await readFile(
   "utf8",
 );
 const attendanceMigration = await readFile(join(migrationsDirectory, migrationFiles[16]), "utf8");
+const gradeMigration = await readFile(join(migrationsDirectory, migrationFiles[17]), "utf8");
+const gradeHardeningMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[18]),
+  "utf8",
+);
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -111,7 +116,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las diecisiete migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las diecinueve migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -129,6 +134,8 @@ test("las diecisiete migraciones tienen nombres versionados y transacciones expl
   assert.match(migrationFiles[14], /^\d{14}_create_student_enrollment_trajectory\.sql$/);
   assert.match(migrationFiles[15], /^\d{14}_create_academic_scheduling\.sql$/);
   assert.match(migrationFiles[16], /^\d{14}_create_attendance_management\.sql$/);
+  assert.match(migrationFiles[17], /^\d{14}_create_grade_management\.sql$/);
+  assert.match(migrationFiles[18], /^\d{14}_harden_grade_management\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -142,6 +149,8 @@ test("las diecisiete migraciones tienen nombres versionados y transacciones expl
     mfaSecurityMigration,
     mfaAdministrationMigration,
     attendanceMigration,
+    gradeMigration,
+    gradeHardeningMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

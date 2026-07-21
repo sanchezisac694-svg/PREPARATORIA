@@ -47,6 +47,17 @@ import {
   validateLatenessMinutes,
 } from "../dist/attendance-management.js";
 import {
+  GradeManagementError,
+  gradeCalculationStatuses,
+  gradeManagementCommands,
+  gradeManagementErrorCodes,
+  gradeManagementOperations,
+  gradeWindowStatuses,
+  subjectResultCodes,
+  unitGradeStatuses,
+  validateGradeDecimal,
+} from "../dist/grade-management.js";
+import {
   StudentEnrollmentError,
   createEnrollmentRequest,
   normalizeInstitutionalStudentCode,
@@ -206,6 +217,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "academic-structure.js",
     "academic-scheduling.js",
     "attendance-management.js",
+    "grade-management.js",
     "auth-session.js",
     "institutional-access.js",
     "mfa-administration.js",
@@ -558,6 +570,10 @@ test("attendance-management falla al importarse desde un Client Component", asyn
   await expectClientBuildFailure("attendance-management");
 });
 
+test("grade-management falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("grade-management");
+});
+
 test("student-enrollment falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("student-enrollment");
 });
@@ -571,6 +587,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "academic-structure",
     "academic-scheduling",
     "attendance-management",
+    "grade-management",
     "student-enrollment",
     "auth-session",
     "institutional-access",
@@ -587,7 +604,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
       },
     );
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /solo puede importarse desde el servidor/);
+    assert.match(result.stderr, /solo puede importarse desde (?:el )?servidor/);
   }
 });
 
@@ -2052,6 +2069,101 @@ test("servicio de inscripción usa puerto inyectable y resultado mínimo", async
   });
   assert.equal(calls[0].sqlFunction, "academic.create_enrollment_request");
   assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+
+test("contrato de calificaciones conserva catálogos y decimales cerrados", () => {
+  assert.deepEqual(gradeWindowStatuses, ["DRAFT", "OPEN", "CLOSED", "CANCELLED"]);
+  assert.deepEqual(unitGradeStatuses, [
+    "DRAFT",
+    "CAPTURED",
+    "REVIEWED",
+    "FINALIZED",
+    "CORRECTED",
+    "CANCELLED",
+  ]);
+  assert.deepEqual(subjectResultCodes, ["AC", "NA", "PENDING"]);
+  assert.deepEqual(gradeCalculationStatuses, ["COMPLETE", "INCOMPLETE", "MANUAL_REVIEW_REQUIRED"]);
+  assert.equal(validateGradeDecimal("0.000"), "0.000");
+  assert.equal(validateGradeDecimal("5.95"), "5.95");
+  assert.equal(validateGradeDecimal("10.0"), "10.0");
+  for (const invalid of ["-1", "10.001", "6.1234", " 6", "NaN"]) {
+    assert.throws(() => validateGradeDecimal(invalid), GradeManagementError);
+  }
+  assert.equal(new Set(gradeManagementErrorCodes).size, gradeManagementErrorCodes.length);
+  assert.deepEqual(Object.keys(gradeManagementCommands), [...gradeManagementOperations]);
+  assert.doesNotMatch(
+    JSON.stringify(gradeManagementCommands),
+    /actorAccountId|sessionVersion|fingerprint|normalizedGrade|resultCode|SupabaseClient/,
+  );
+});
+
+test("servicio de calificaciones usa puerto inyectable y resultado mínimo", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-grade", status: "CAPTURED" };
+    },
+  };
+  const result = await gradeManagementCommands.CAPTURE_STUDENT_UNIT_GRADE(
+    {
+      idempotencyKey: "SYNTHETIC_GRADE_01",
+      input: { rawGrade: "6.25", subjectUnitId: "synthetic-unit" },
+    },
+    port,
+  );
+  assert.deepEqual(result, { entityId: "synthetic-grade", status: "CAPTURED" });
+  assert.equal(calls[0].sqlFunction, "academic.capture_student_unit_grade");
+});
+
+test("confirmaciones y correcciones conservan idempotencia y respuestas mínimas", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-entity", status: "COMPLETED" };
+    },
+  };
+  for (const operation of [
+    "CONFIRM_SUBJECT_FINAL_RESULT",
+    "CONFIRM_SEMESTER_PROGRESS_DECISION",
+    "APPROVE_GRADE_CORRECTION",
+    "APPLY_GRADE_CORRECTION",
+  ]) {
+    const result = await gradeManagementCommands[operation](
+      { idempotencyKey: `KEY_${operation}`, input: { entityId: "synthetic-entity" } },
+      port,
+    );
+    assert.deepEqual(result, { entityId: "synthetic-entity", status: "COMPLETED" });
+  }
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((command) => command.idempotencyKey.startsWith("KEY_")));
+  assert.doesNotMatch(JSON.stringify(calls), /actorAccountId|sessionVersion|aal|fingerprint/i);
+});
+
+test("captura interna por lote conserva un único comando atómico", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-batch", status: "CAPTURED" };
+    },
+  };
+  await gradeManagementCommands.CAPTURE_BULK_UNIT_GRADES(
+    {
+      idempotencyKey: "SYNTHETIC_BATCH_01",
+      input: {
+        items: [
+          { offeringEnrollmentId: "offering-1", subjectUnitId: "unit-1", rawGrade: "6.25" },
+          { offeringEnrollmentId: "offering-1", subjectUnitId: "unit-2", rawGrade: "7.50" },
+        ],
+      },
+    },
+    port,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].sqlFunction, "academic.capture_bulk_unit_grades");
+  assert.equal(calls[0].input.items.length, 2);
 });
 
 test("contrato de horarios valida entradas y mantiene catálogos cerrados", () => {

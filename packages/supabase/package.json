@@ -20,6 +20,10 @@
       "types": "./src/attendance-management.ts",
       "default": "./dist/attendance-management.js"
     },
+    "./grade-management": {
+      "types": "./src/grade-management.ts",
+      "default": "./dist/grade-management.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
