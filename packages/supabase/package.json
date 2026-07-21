@@ -16,6 +16,10 @@
       "types": "./src/academic-scheduling.ts",
       "default": "./dist/academic-scheduling.js"
     },
+    "./attendance-management": {
+      "types": "./src/attendance-management.ts",
+      "default": "./dist/attendance-management.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"

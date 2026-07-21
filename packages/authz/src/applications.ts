@@ -28,6 +28,7 @@ export const applicationRoleMap = Object.freeze({
     roles.SUPERADMIN,
     roles.ADMINISTRATIVO,
     roles.CONTROL_ESCOLAR,
+    roles.PREFECTURA,
     roles.CAJA,
   ]),
 }) satisfies Readonly<Record<Application, readonly Role[]>>;

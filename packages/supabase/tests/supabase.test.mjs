@@ -36,6 +36,17 @@ import {
   validateTimeValue,
 } from "../dist/academic-scheduling.js";
 import {
+  AttendanceManagementError,
+  attendanceManagementCommands,
+  attendanceManagementErrorCodes,
+  attendanceManagementOperations,
+  attendanceManagementSqlFunctions,
+  attendanceSessionStatuses,
+  attendanceStatuses,
+  validateAttendanceDate,
+  validateLatenessMinutes,
+} from "../dist/attendance-management.js";
+import {
   StudentEnrollmentError,
   createEnrollmentRequest,
   normalizeInstitutionalStudentCode,
@@ -194,6 +205,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "account-lifecycle.js",
     "academic-structure.js",
     "academic-scheduling.js",
+    "attendance-management.js",
     "auth-session.js",
     "institutional-access.js",
     "mfa-administration.js",
@@ -542,6 +554,10 @@ test("academic-scheduling falla al importarse desde un Client Component", async 
   await expectClientBuildFailure("academic-scheduling");
 });
 
+test("attendance-management falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("attendance-management");
+});
+
 test("student-enrollment falla al importarse desde un Client Component", async () => {
   await expectClientBuildFailure("student-enrollment");
 });
@@ -554,6 +570,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "account-lifecycle",
     "academic-structure",
     "academic-scheduling",
+    "attendance-management",
     "student-enrollment",
     "auth-session",
     "institutional-access",
@@ -2097,5 +2114,71 @@ test("servicio de horarios usa puerto inyectable y retorna datos mínimos", asyn
     missingOfferingCount: 0,
     valid: true,
   });
+  assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+
+test("contrato de asistencia mantiene estados, fechas y minutos cerrados", () => {
+  assert.deepEqual(attendanceStatuses, ["NOT_RECORDED", "PRESENT", "ABSENT", "LATE", "EXCUSED"]);
+  assert.deepEqual(attendanceSessionStatuses, ["DRAFT", "OPEN", "CLOSED", "CANCELLED", "LOCKED"]);
+  assert.equal(validateAttendanceDate("2095-03-14"), "2095-03-14");
+  assert.equal(validateLatenessMinutes("LATE", 4), 4);
+  assert.equal(validateLatenessMinutes("PRESENT", null), null);
+  assert.throws(
+    () => validateLatenessMinutes("LATE", 0),
+    (error) =>
+      error instanceof AttendanceManagementError && error.code === "LATENESS_MINUTES_REQUIRED",
+  );
+  assert.throws(
+    () => validateLatenessMinutes("ABSENT", 1),
+    (error) =>
+      error instanceof AttendanceManagementError && error.code === "LATENESS_MINUTES_NOT_ALLOWED",
+  );
+  assert.equal(new Set(attendanceManagementErrorCodes).size, attendanceManagementErrorCodes.length);
+  assert.deepEqual(Object.keys(attendanceManagementSqlFunctions), [
+    ...attendanceManagementOperations,
+  ]);
+  assert.deepEqual(Object.keys(attendanceManagementCommands), [...attendanceManagementOperations]);
+  assert.doesNotMatch(
+    JSON.stringify({ attendanceManagementCommands, attendanceManagementSqlFunctions }),
+    /actorAccountId|sessionVersion|requestFingerprint|SupabaseClient|email|name|token|nip/,
+  );
+});
+
+test("servicio de asistencia usa puerto inyectable y retorna datos mínimos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "synthetic-session", operation: command.operation, status: "DRAFT" };
+    },
+    getSessionSummary: async () => ({
+      absentCount: 0,
+      excusedCount: 0,
+      expectedCount: 1,
+      lateCount: 0,
+      notRecordedCount: 1,
+      presentCount: 0,
+      recordedCount: 0,
+    }),
+    getStudentLatenessSummary: async () => ({
+      alertSequence: 0,
+      currentCount: 0,
+      lifetimeCount: 0,
+      pendingAlertCount: 0,
+    }),
+  };
+  const result = await attendanceManagementCommands.CREATE_ATTENDANCE_SESSION(
+    {
+      idempotencyKey: "SYNTHETIC_ATTENDANCE_01",
+      input: { classSessionId: "synthetic-class", sessionDate: "2095-03-14" },
+    },
+    port,
+  );
+  assert.deepEqual(result, {
+    entityId: "synthetic-session",
+    operation: "CREATE_ATTENDANCE_SESSION",
+    status: "DRAFT",
+  });
+  assert.equal(calls[0].sqlFunction, "academic.create_attendance_session");
   assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
 });

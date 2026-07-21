@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  16,
-  "Fase 3 Bloque 3 debe conservar quince migraciones históricas y añadir horarios",
+  17,
+  "Fase 3 Bloque 4 debe conservar dieciséis migraciones históricas y añadir asistencia",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -45,6 +45,7 @@ const mfaAdministrationMigration = await readFile(
   join(migrationsDirectory, migrationFiles[10]),
   "utf8",
 );
+const attendanceMigration = await readFile(join(migrationsDirectory, migrationFiles[16]), "utf8");
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -78,10 +79,15 @@ function seededRoles() {
   );
 
   assert.ok(match, "No se encontró la carga idempotente de roles");
-  return [...match[1].matchAll(/\('([A-Z_]+)',\s*'([^']+)'/g)].map(([, code, displayName]) => ({
-    code,
-    displayName,
-  }));
+  const seeded = [...match[1].matchAll(/\('([A-Z_]+)',\s*'([^']+)'/g)].map(
+    ([, code, displayName]) => ({
+      code,
+      displayName,
+    }),
+  );
+  const prefecture = attendanceMigration.match(/values\('PREFECTURA','([^']+)',true,true\)/i);
+  assert.ok(prefecture, "No se encontró la carga de PREFECTURA");
+  return [...seeded, { code: "PREFECTURA", displayName: prefecture[1] }];
 }
 
 function rolesForApplication(application) {
@@ -93,10 +99,19 @@ function rolesForApplication(application) {
   const match = mappings.find((mapping) => mapping[2] === application);
 
   assert.ok(match, `No se encontró el mapeo SQL para ${application}`);
-  return [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
+  const roles = [...match[1].matchAll(/'([A-Z_]+)'/g)].map((value) => value[1]);
+  if (
+    application === "SISTEMA_ADMINISTRATIVO" &&
+    /\['SUPERADMIN','ADMINISTRATIVO','CONTROL_ESCOLAR','PREFECTURA','CAJA'\]/.test(
+      attendanceMigration,
+    )
+  ) {
+    roles.splice(3, 0, "PREFECTURA");
+  }
+  return roles;
 }
 
-test("las dieciséis migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las diecisiete migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -112,6 +127,8 @@ test("las dieciséis migraciones tienen nombres versionados y transacciones expl
   assert.match(migrationFiles[12], /^\d{14}_harden_academic_structure\.sql$/);
   assert.match(migrationFiles[13], /^\d{14}_complete_academic_structure_controls\.sql$/);
   assert.match(migrationFiles[14], /^\d{14}_create_student_enrollment_trajectory\.sql$/);
+  assert.match(migrationFiles[15], /^\d{14}_create_academic_scheduling\.sql$/);
+  assert.match(migrationFiles[16], /^\d{14}_create_attendance_management\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -124,6 +141,7 @@ test("las dieciséis migraciones tienen nombres versionados y transacciones expl
     sessionSecurityMigration,
     mfaSecurityMigration,
     mfaAdministrationMigration,
+    attendanceMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

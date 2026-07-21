@@ -40,6 +40,7 @@ const expectedRoles = [
   "CAJA",
   "CONTROL_ESCOLAR",
   "DOCENTE",
+  "PREFECTURA",
   "SUPERADMIN",
   "TUTOR",
 ];
@@ -47,6 +48,9 @@ const expectedRoles = [
 const expectedPermissions = [
   "academic.assignments.manage",
   "academic.assignments.read",
+  "academic.attendance.manage",
+  "academic.attendance.read",
+  "academic.attendance.validate",
   "academic.cycles.manage",
   "academic.cycles.read",
   "academic.enrollment_requests.manage",
@@ -59,10 +63,16 @@ const expectedPermissions = [
   "academic.group_assignments.read",
   "academic.groups.manage",
   "academic.groups.read",
+  "academic.lateness.notifications.record",
+  "academic.lateness.read",
+  "academic.lateness.validate",
   "academic.offerings.manage",
   "academic.offerings.read",
   "academic.periods.manage",
   "academic.periods.read",
+  "academic.permissions.manage",
+  "academic.permissions.read",
+  "academic.permissions.validate",
   "academic.plans.approve",
   "academic.plans.manage",
   "academic.plans.read",
@@ -519,6 +529,7 @@ test("los accesos por aplicación están enumerados y congelados", () => {
     roles.SUPERADMIN,
     roles.ADMINISTRATIVO,
     roles.CONTROL_ESCOLAR,
+    roles.PREFECTURA,
     roles.CAJA,
   ]);
   assert.equal(Object.isFrozen(applicationRoleMap), true);
