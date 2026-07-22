@@ -98,7 +98,16 @@ select ok(not exists(select 1 from academic.grade_commands where request_fingerp
 select throws_ok($$update academic.grade_commands set status='FAILED' where status='COMPLETED'$$,'HISTORICAL_GRADE_IMMUTABLE','comando final inmutable');
 select is((select count(*)::integer from auth.users where id::text like 'e100%'),3,'Auth intacto durante el fixture transaccional');
 select is((select count(*)::integer from pg_trigger where tgrelid='auth.users'::regclass and not tgisinternal and tgname like '%grade%'),0,'sin triggers de calificaciones en Auth');
-select ok(not exists(select 1 from information_schema.routines where routine_schema='public' and routine_name like '%grade%'),'sin funciones públicas de calificaciones');
+select is(
+  (
+    select count(*)::integer
+    from information_schema.routines
+    where routine_schema = 'public'
+      and routine_name like '%grade%'
+  ),
+  1,
+  'solo existe el wrapper público de calificaciones propias'
+);
 select is((select count(*)::integer from academic.subject_result_history where resulting_status='CONFIRMED'),1,'historial de confirmación único');
 select ok((select count(*) from academic.grade_commands where status='COMPLETED')>=11,'mutaciones registradas como comandos completos');
 

@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  19,
-  "Fase 3 Bloque 5 debe conservar diecisiete migraciones históricas y añadir base más endurecimiento",
+  20,
+  "Fase 4 Bloque 1 debe conservar diecinueve migraciones hist�ricas y a�adir el read model del portal del alumno",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -49,6 +49,10 @@ const attendanceMigration = await readFile(join(migrationsDirectory, migrationFi
 const gradeMigration = await readFile(join(migrationsDirectory, migrationFiles[17]), "utf8");
 const gradeHardeningMigration = await readFile(
   join(migrationsDirectory, migrationFiles[18]),
+  "utf8",
+);
+const studentPortalMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[19]),
   "utf8",
 );
 const institutionalAccessSource = await readFile(
@@ -116,7 +120,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las diecinueve migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veinte migraciones tienen nombres versionados y transacciones expl�citas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -136,6 +140,7 @@ test("las diecinueve migraciones tienen nombres versionados y transacciones expl
   assert.match(migrationFiles[16], /^\d{14}_create_attendance_management\.sql$/);
   assert.match(migrationFiles[17], /^\d{14}_create_grade_management\.sql$/);
   assert.match(migrationFiles[18], /^\d{14}_harden_grade_management\.sql$/);
+  assert.match(migrationFiles[19], /^\d{14}_student_portal_read_model\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -151,6 +156,7 @@ test("las diecinueve migraciones tienen nombres versionados y transacciones expl
     attendanceMigration,
     gradeMigration,
     gradeHardeningMigration,
+    studentPortalMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

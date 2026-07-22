@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
 test("login institucional, aspirante, dashboard y proxy protegen el Portal Escolar", async () => {
@@ -42,7 +43,7 @@ test("login institucional, aspirante, dashboard y proxy protegen el Portal Escol
   assert.match(changeNip, /current-password/);
   assert.equal((changeNip.match(/new-password/g) ?? []).length, 2);
   assert.doesNotMatch(changeNip, /query|searchParams|localStorage|alias/i);
-  assert.match(recovery, /verificaciÃ³n presencial|verificación presencial/);
+  assert.match(recovery, /verificación presencial|verificaciÃ³n presencial/);
 });
 
 test("puede importar la fábrica pública sin crear un cliente", () => {
@@ -66,4 +67,62 @@ test("rutas MFA usan Server Actions y no persisten material TOTP", async () => {
   assert.match(challenge, /one-time-code/);
   assert.match(proxy, /mfaRequired/);
   assert.doesNotMatch(enrollment + challenge, /localStorage|indexedDB|caches\.|searchParams/);
+});
+
+test("portal del alumno mantiene resolución server-side y no acepta selectores de expediente", async () => {
+  const [
+    layout,
+    service,
+    overview,
+    record,
+    subjects,
+    schedule,
+    attendance,
+    permissions,
+    grades,
+    trajectory,
+  ] = await Promise.all([
+    readFile(new URL("../app/alumno/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/student-portal.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/expediente/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/materias/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/horario/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/asistencia/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/permisos/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/calificaciones/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/trayectoria/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  const combined = [
+    layout,
+    service,
+    overview,
+    record,
+    subjects,
+    schedule,
+    attendance,
+    permissions,
+    grades,
+    trajectory,
+  ].join("\n");
+
+  assert.match(layout, /requireStudentPortalAccess/);
+  assert.match(layout, /noStore/);
+  assert.match(service, /createStudentPortalService/);
+  assert.match(service, /roleCodes\.includes\("ALUMNO"\)/);
+  assert.match(service, /readSupabasePublicEnv/);
+  assert.match(overview, /force-dynamic/);
+  assert.match(overview, /revalidate = 0/);
+  assert.match(overview, /noStore/);
+  assert.match(
+    overview,
+    /Consulta académica propia|Consulta acadÃ©mica propia|Resumen académico|Resumen acadÃ©mico/,
+  );
+  assert.match(schedule, /Docente pendiente de asignación|Docente pendiente de asignaciÃ³n/);
+  assert.doesNotMatch(
+    combined,
+    /student_record_id|account_id|person_id|auth_user_id|searchParams|params\.|useSearchParams|localStorage|sessionStorage|createServerActionClient|from\(/i,
+  );
+  assert.doesNotMatch(combined, /DRAFT|UNDER_REVIEW|CAPTURED|REVIEWED|CALCULATED/);
 });

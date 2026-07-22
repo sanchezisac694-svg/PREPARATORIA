@@ -68,6 +68,10 @@
       "types": "./src/student-enrollment.ts",
       "default": "./dist/student-enrollment.js"
     },
+    "./student-portal": {
+      "types": "./src/student-portal.ts",
+      "default": "./dist/student-portal.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"

@@ -66,6 +66,7 @@ import {
   studentEnrollmentSqlFunctions,
   validateStudentSemester,
 } from "../dist/student-enrollment.js";
+import { createStudentPortalService, studentPortalRpcNames } from "../dist/student-portal.js";
 import {
   createAuthenticationService,
   evaluateApplicationAccess,
@@ -230,6 +231,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "provisioning.js",
     "session-security.js",
     "student-enrollment.js",
+    "student-portal.js",
     "ssr.js",
     "types.js",
   ];
@@ -578,6 +580,10 @@ test("student-enrollment falla al importarse desde un Client Component", async (
   await expectClientBuildFailure("student-enrollment");
 });
 
+test("student-portal falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("student-portal");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
@@ -589,6 +595,7 @@ test("las entradas server-only conservan una defensa adicional de ejecución", a
     "attendance-management",
     "grade-management",
     "student-enrollment",
+    "student-portal",
     "auth-session",
     "institutional-access",
     "nip-security",
@@ -2293,4 +2300,52 @@ test("servicio de asistencia usa puerto inyectable y retorna datos mínimos", as
   });
   assert.equal(calls[0].sqlFunction, "academic.create_attendance_session");
   assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
+});
+test("servicio SSR del portal del alumno consume solo RPCs públicos controlados", async () => {
+  const calls = [];
+  const service = createStudentPortalService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async (name, input) => {
+        calls.push({ input, name });
+        return { data: { ok: true }, error: null };
+      },
+    }),
+  );
+
+  assert.deepEqual(studentPortalRpcNames, [
+    "get_my_student_portal_attendance",
+    "get_my_student_portal_grades",
+    "get_my_student_portal_overview",
+    "get_my_student_portal_permissions",
+    "get_my_student_portal_record",
+    "get_my_student_portal_schedule",
+    "get_my_student_portal_subjects",
+    "get_my_student_portal_trajectory",
+  ]);
+
+  await service.getOverview("00000000-0000-4000-8000-000000000001");
+  await service.getRecord();
+  await service.getSubjects();
+  await service.getSchedule();
+  await service.getAttendance();
+  await service.getPermissions();
+  await service.getGrades();
+  await service.getTrajectory();
+
+  assert.equal(calls.length, 8);
+  assert.deepEqual(calls[0], {
+    input: { requested_period_id: "00000000-0000-4000-8000-000000000001" },
+    name: "get_my_student_portal_overview",
+  });
+  assert.ok(calls.every((call) => String(call.name).startsWith("get_my_student_portal_")));
+  assert.doesNotMatch(
+    JSON.stringify(calls),
+    /student_record_id|account_id|person_id|auth_user_id|from\(/i,
+  );
+  assert.throws(
+    () => service.getOverview("periodo-invalido"),
+    (error) => error instanceof Error && error.code === "STUDENT_PORTAL_PERIOD_INVALID",
+  );
 });

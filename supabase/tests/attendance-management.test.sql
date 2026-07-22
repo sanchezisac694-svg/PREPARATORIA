@@ -74,7 +74,17 @@ select has_function('academic','get_attendance_session_summary','69 session summ
 select has_function('academic','get_student_attendance_summary','70 student summary');
 select has_function('academic','get_student_lateness_summary','71 lateness summary');
 select has_function('academic','validate_attendance_session_integrity','72 integrity function');
-select is((select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like '%attendance%'),0::bigint,'73 no public attendance functions');
+select is(
+  (
+    select count(*)::bigint
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname like '%attendance%'
+  ),
+  1::bigint,
+  '73 solo existe el wrapper público de asistencia propia'
+);
 select is((select count(*) from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and not t.tgisinternal and pg_get_triggerdef(t.oid) like '%attendance%'),0::bigint,'74 Auth has no attendance triggers');
 select ok(not exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='academic' and p.proname like '%attendance%' and p.proconfig is null),'75 fixed search_path');
 

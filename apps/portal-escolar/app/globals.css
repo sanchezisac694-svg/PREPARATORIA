@@ -21,3 +21,61 @@ h1 {
   color: #526079;
   font-size: 0.875rem;
 }
+
+.student-portal {
+  gap: 1rem;
+  padding-bottom: 2rem;
+}
+
+.student-portal,
+.student-portal header,
+.student-portal nav {
+  display: grid;
+}
+
+.student-portal-nav {
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  margin-bottom: 1rem;
+}
+
+.student-portal-header {
+  gap: 0.5rem;
+}
+
+.student-portal-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.student-portal-metric {
+  border: 1px solid #d6dce8;
+  border-radius: 0.75rem;
+  padding: 0.875rem;
+}
+
+.student-portal-metric__label {
+  color: #526079;
+  display: block;
+  font-size: 0.875rem;
+}
+
+.student-portal-metric__value {
+  display: block;
+  font-size: 1.125rem;
+  margin-top: 0.35rem;
+}
+
+.student-portal-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.student-portal-table th,
+.student-portal-table td {
+  border-bottom: 1px solid #d6dce8;
+  padding: 0.75rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
