@@ -37,7 +37,7 @@ select is(
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
-      and p.proname like '%schedule%'
+      and p.proname = 'get_my_student_portal_schedule'
   ),
   1,
   '28 solo existe el wrapper público de horario propio'

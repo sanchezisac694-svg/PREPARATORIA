@@ -66,6 +66,11 @@ import {
   studentEnrollmentSqlFunctions,
   validateStudentSemester,
 } from "../dist/student-enrollment.js";
+import {
+  GuardianPortalError,
+  createGuardianPortalService,
+  guardianPortalRpcNames,
+} from "../dist/guardian-portal.js";
 import { createStudentPortalService, studentPortalRpcNames } from "../dist/student-portal.js";
 import {
   createAuthenticationService,
@@ -2347,5 +2352,61 @@ test("servicio SSR del portal del alumno consume solo RPCs públicos controlados
   assert.throws(
     () => service.getOverview("periodo-invalido"),
     (error) => error instanceof Error && error.code === "STUDENT_PORTAL_PERIOD_INVALID",
+  );
+});
+
+test("servicio SSR del portal del tutor consume solo RPCs públicos controlados", async () => {
+  const calls = [];
+  const service = createGuardianPortalService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async (name, input) => {
+        calls.push({ input, name });
+        return { data: { ok: true }, error: null };
+      },
+    }),
+  );
+
+  assert.deepEqual(guardianPortalRpcNames, [
+    "get_my_guardian_portal_overview",
+    "get_my_linked_students",
+    "get_my_guardian_student_overview",
+    "get_my_guardian_student_record",
+    "get_my_guardian_student_subjects",
+    "get_my_guardian_student_schedule",
+    "get_my_guardian_student_attendance",
+    "get_my_guardian_student_permissions",
+    "get_my_guardian_student_grades",
+    "get_my_guardian_student_results",
+    "get_my_guardian_student_progress",
+    "get_my_guardian_student_history",
+  ]);
+
+  const id = "00000000-0000-4000-8000-000000000001";
+  await service.getPortalOverview();
+  await service.getLinkedStudents();
+  await service.getStudentOverview(id);
+  await service.getStudentRecord(id);
+  await service.getStudentSubjects(id);
+  await service.getStudentSchedule(id);
+  await service.getStudentAttendance(id);
+  await service.getStudentPermissions(id);
+  await service.getStudentGrades(id);
+  await service.getStudentResults(id);
+  await service.getStudentProgress(id);
+  await service.getStudentHistory(id, 10, 0);
+
+  assert.equal(calls.length, 12);
+  assert.equal(calls[2].name, "get_my_guardian_student_overview");
+  assert.equal(calls[3].name, "get_my_guardian_student_record");
+  assert.doesNotMatch(
+    JSON.stringify(calls),
+    /student_record_id|guardian_account_id|account_id|person_id|auth_user_id|from\(/i,
+  );
+  assert.throws(
+    () => service.getStudentOverview("invalido"),
+    (error) =>
+      error instanceof GuardianPortalError && error.code === "GUARDIAN_PORTAL_ACCESS_DENIED",
   );
 });

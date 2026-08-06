@@ -24,6 +24,10 @@
       "types": "./src/grade-management.ts",
       "default": "./dist/grade-management.js"
     },
+    "./guardian-portal": {
+      "types": "./src/guardian-portal.ts",
+      "default": "./dist/guardian-portal.js"
+    },
     "./browser": {
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"

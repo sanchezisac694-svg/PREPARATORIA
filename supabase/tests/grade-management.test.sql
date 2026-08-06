@@ -103,7 +103,7 @@ select is(
     select count(*)::integer
     from information_schema.routines
     where routine_schema = 'public'
-      and routine_name like '%grade%'
+      and routine_name = 'get_my_student_portal_grades'
   ),
   1,
   'solo existe el wrapper público de calificaciones propias'

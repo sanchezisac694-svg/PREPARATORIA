@@ -126,3 +126,52 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
   );
   assert.doesNotMatch(combined, /DRAFT|UNDER_REVIEW|CAPTURED|REVIEWED|CALCULATED/);
 });
+
+test("portal del tutor resuelve vínculos server-side y no acepta selectores directos del alumno", async () => {
+  const [layout, service, overview, students, studentPage, record, schedule, attendance, grades] =
+    await Promise.all([
+      readFile(new URL("../app/tutor/layout.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../lib/guardian-portal.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/tutor/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/tutor/alumnos/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/tutor/alumnos/[linkId]/page.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/tutor/alumnos/[linkId]/expediente/page.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../app/tutor/alumnos/[linkId]/horario/page.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/tutor/alumnos/[linkId]/asistencia/page.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/tutor/alumnos/[linkId]/calificaciones/page.tsx", import.meta.url),
+        "utf8",
+      ),
+    ]);
+
+  const combined = [
+    layout,
+    service,
+    overview,
+    students,
+    studentPage,
+    record,
+    schedule,
+    attendance,
+    grades,
+  ].join("\n");
+
+  assert.match(layout, /requireGuardianPortalAccess/);
+  assert.match(layout, /noStore/);
+  assert.match(service, /createGuardianPortalService/);
+  assert.match(service, /roleCodes\.includes\("TUTOR"\)/);
+  assert.match(service, /readSupabasePublicEnv/);
+  assert.match(overview, /STANDARD_ACADEMIC_READ/);
+  assert.match(studentPage, /params: Promise<\{ linkId: string \}>/);
+  assert.match(studentPage, /const \{ linkId \} = await params;/);
+  assert.doesNotMatch(
+    combined,
+    /student_record_id|guardian_account_id|account_id|person_id|auth_user_id|searchParams|useSearchParams|localStorage|sessionStorage|from\(/i,
+  );
+});
