@@ -73,6 +73,12 @@ import {
 } from "../dist/guardian-portal.js";
 import { createStudentPortalService, studentPortalRpcNames } from "../dist/student-portal.js";
 import {
+  AcademicDocumentsError,
+  createAcademicDocumentsService,
+  createLocalAcademicDocumentFileStore,
+  createVerificationCode,
+} from "../dist/academic-documents.js";
+import {
   createAuthenticationService,
   evaluateApplicationAccess,
   safeInternalRedirect,
@@ -220,6 +226,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
 
   const supabaseRuntimeFiles = [
     "account-lifecycle.js",
+    "academic-documents.js",
     "academic-structure.js",
     "academic-scheduling.js",
     "attendance-management.js",
@@ -589,10 +596,15 @@ test("student-portal falla al importarse desde un Client Component", async () =>
   await expectClientBuildFailure("student-portal");
 });
 
+test("academic-documents falla al importarse desde un Client Component", async () => {
+  await expectClientBuildFailure("academic-documents");
+});
+
 test("las entradas server-only conservan una defensa adicional de ejecución", async () => {
   for (const moduleName of [
     "ssr",
     "admin-contract",
+    "academic-documents",
     "provisioning",
     "account-lifecycle",
     "academic-structure",
@@ -2306,6 +2318,188 @@ test("servicio de asistencia usa puerto inyectable y retorna datos mínimos", as
   assert.equal(calls[0].sqlFunction, "academic.create_attendance_session");
   assert.doesNotMatch(JSON.stringify(result), /email|name|token|nip|SupabaseClient/i);
 });
+
+test("file store local genera artefactos deterministas y sin rutas absolutas", async () => {
+  const store = createLocalAcademicDocumentFileStore(
+    join(tmpdir(), "preparatoria-documents-tests"),
+  );
+  const input = {
+    documentId: "00000000-0000-4000-8000-000000000001",
+    folio: "DOC-ECT-2026-000001",
+    payload: { alpha: 1, beta: "two" },
+    title: "Constancia informativa de inscripción",
+  };
+
+  const first = await store.createDeterministicPdf(input);
+  const second = await store.createDeterministicPdf(input);
+  const content = (await store.read(first.objectPath)).toString("utf8");
+
+  assert.deepEqual(first, second);
+  assert.match(first.fileHash, /^[0-9a-f]{64}$/);
+  assert.equal(first.mimeType, "application/pdf");
+  assert.match(first.objectPath, /^documents\/[0-9a-f-]+\/[0-9a-f]{12}\.pdf$/i);
+  assert.doesNotMatch(first.objectPath, /^[A-Za-z]:\\/);
+  assert.doesNotMatch(first.objectPath, /[:\\]/);
+  assert.match(content, /Documento informativo generado por el sistema\./);
+  assert.doesNotMatch(content, /oficial|SEP|certificado/i);
+});
+
+test("servicio documental SSR consume solo RPCs públicos controlados", async () => {
+  const calls = [];
+  const service = createAcademicDocumentsService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async (name, input) => {
+        calls.push({ input, name });
+        switch (name) {
+          case "get_my_documents":
+            return {
+              data: [
+                {
+                  documentId: "00000000-0000-4000-8000-000000000101",
+                  folio: "DOC-ECT-2026-000001",
+                  issuedAt: "2026-01-02T00:00:00.000Z",
+                  publishedAt: "2026-01-02T00:05:00.000Z",
+                  requestedPeriodId: null,
+                  status: "PUBLISHED",
+                  typeCode: "ENROLLMENT_CERTIFICATE",
+                  typeName: "Constancia informativa de inscripción",
+                },
+              ],
+              error: null,
+            };
+          case "get_my_document":
+          case "get_my_guardian_student_document":
+            return {
+              data: {
+                documentId: "00000000-0000-4000-8000-000000000101",
+                folio: "DOC-ECT-2026-000001",
+                issuedAt: "2026-01-02T00:00:00.000Z",
+                publishedAt: "2026-01-02T00:05:00.000Z",
+                requestedPeriodId: null,
+                status: "PUBLISHED",
+                typeCode: "ENROLLMENT_CERTIFICATE",
+                typeName: "Constancia informativa de inscripción",
+                downloadAvailable: name === "get_my_document",
+                supersedesDocumentId: null,
+                supersededByDocumentId: null,
+              },
+              error: null,
+            };
+          case "get_my_document_download":
+            return {
+              data: {
+                documentId: "00000000-0000-4000-8000-000000000101",
+                objectPath: "documents/00000000-0000-4000-8000-000000000101/abc123def456.pdf",
+                sizeBytes: 256,
+                fileHash: "a".repeat(64),
+              },
+              error: null,
+            };
+          case "get_my_guardian_student_documents":
+            return {
+              data: [
+                {
+                  documentId: "00000000-0000-4000-8000-000000000101",
+                  folio: "DOC-ECT-2026-000001",
+                  issuedAt: "2026-01-02T00:00:00.000Z",
+                  publishedAt: null,
+                  requestedPeriodId: null,
+                  status: "REVOKED",
+                  typeCode: "ENROLLMENT_CERTIFICATE",
+                  typeName: "Constancia informativa de inscripción",
+                },
+              ],
+              error: null,
+            };
+          case "verify_document_public":
+            return {
+              data: {
+                verified: true,
+                folio: "DOC-ECT-2026-000001",
+                issuedAt: "2026-01-02T00:00:00.000Z",
+                status: "VIGENTE",
+                typeName: "Constancia informativa de inscripción",
+              },
+              error: null,
+            };
+          default:
+            return { data: null, error: null };
+        }
+      },
+    }),
+  );
+
+  const linkId = "00000000-0000-4000-8000-000000000201";
+  const documentId = "00000000-0000-4000-8000-000000000101";
+  await service.getMyDocuments();
+  await service.getMyDocument(documentId);
+  await service.getMyDocumentDownload(documentId);
+  await service.getGuardianStudentDocuments(linkId);
+  await service.getGuardianStudentDocument(linkId, documentId);
+  await service.verifyPublicDocument(" DOC-ECT-2026-000001 ", "  code-123 ");
+
+  assert.deepEqual(
+    calls.map((call) => call.name),
+    [
+      "get_my_documents",
+      "get_my_document",
+      "get_my_document_download",
+      "get_my_guardian_student_documents",
+      "get_my_guardian_student_document",
+      "verify_document_public",
+    ],
+  );
+  assert.deepEqual(calls[1], {
+    input: { document_id: documentId },
+    name: "get_my_document",
+  });
+  assert.deepEqual(calls[3], {
+    input: { link_id: linkId },
+    name: "get_my_guardian_student_documents",
+  });
+  assert.deepEqual(calls[4], {
+    input: { document_id: documentId, link_id: linkId },
+    name: "get_my_guardian_student_document",
+  });
+  assert.deepEqual(calls[5], {
+    input: { folio: "DOC-ECT-2026-000001", verification_code: "CODE-123" },
+    name: "verify_document_public",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(calls),
+    /student_record_id|guardian_account_id|account_id|person_id|auth_user_id|from\(/i,
+  );
+});
+
+test("servicio documental falla cerrado ante scope denegado y UUIDs inválidos", async () => {
+  const service = createAcademicDocumentsService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async () => ({ data: { error: "DOCUMENT_SCOPE_DENIED" }, error: null }),
+    }),
+  );
+
+  await assert.rejects(
+    service.getGuardianStudentDocuments("00000000-0000-4000-8000-000000000201"),
+    (error) => error instanceof AcademicDocumentsError && error.code === "DOCUMENT_SCOPE_DENIED",
+  );
+  assert.throws(
+    () => service.validateOwnDocumentInput("not-a-uuid"),
+    (error) => error instanceof AcademicDocumentsError && error.code === "DOCUMENT_NOT_FOUND",
+  );
+});
+
+test("código público de verificación produce hash estable y no expone el valor", () => {
+  const value = createVerificationCode();
+  assert.match(value.plain, /^[A-Z0-9_-]{8}$/);
+  assert.equal(value.prefix, value.plain.slice(0, 4));
+  assert.match(value.hash, /^[0-9a-f]{64}$/);
+  assert.doesNotMatch(value.hash, new RegExp(value.plain, "i"));
+});
+
 test("servicio SSR del portal del alumno consume solo RPCs públicos controlados", async () => {
   const calls = [];
   const service = createStudentPortalService(
