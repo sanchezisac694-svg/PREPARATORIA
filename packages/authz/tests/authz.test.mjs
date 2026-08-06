@@ -121,12 +121,38 @@ const expectedPermissions = [
   "audit.read",
   "documents.manage",
   "documents.read",
+  "documents.generate",
+  "documents.publish",
+  "documents.requests.approve",
+  "documents.requests.create",
+  "documents.requests.review",
+  "documents.revoke",
+  "documents.supersede",
+  "documents.templates.manage",
+  "documents.types.manage",
+  "documents.verify.audit",
   "grades.manage",
   "grades.read",
   "identity.manage",
   "identity.read",
   "payments.manage",
   "payments.read",
+  "portal.guardian.read_linked_student_attendance",
+  "portal.guardian.documents.read_linked",
+  "portal.guardian.read_linked_student_grades",
+  "portal.guardian.read_linked_student_history",
+  "portal.guardian.read_linked_student_overview",
+  "portal.guardian.read_linked_student_permissions",
+  "portal.guardian.read_linked_student_record",
+  "portal.guardian.read_linked_student_schedule",
+  "portal.guardian.read_own_links",
+  "portal.guardian_links.approve",
+  "portal.guardian_links.manage",
+  "portal.guardian_links.read",
+  "portal.guardian_links.review",
+  "portal.guardian_links.revoke",
+  "portal.guardian_scopes.manage",
+  "portal.student.documents.read_own",
   "reports.export",
   "reports.read",
   "roles.assign",
@@ -160,8 +186,8 @@ test("el catálogo de roles es cerrado, estable y congelado", () => {
 });
 
 test("el catálogo de permisos es cerrado, estable y sin wildcards", () => {
-  assert.deepEqual([...permissionValues].sort(), expectedPermissions);
-  assert.deepEqual(Object.values(permissions).sort(), expectedPermissions);
+  assert.deepEqual([...permissionValues].sort(), [...expectedPermissions].sort());
+  assert.deepEqual(Object.values(permissions).sort(), [...expectedPermissions].sort());
   assert.equal(Object.isFrozen(permissions), true);
   assert.equal(Object.isFrozen(permissionValues), true);
 
@@ -183,7 +209,10 @@ test("la matriz enumera permisos válidos explícitos para todos los roles", () 
     }
   }
 
-  assert.deepEqual([...rolePermissionMap[roles.SUPERADMIN]].sort(), expectedPermissions);
+  assert.deepEqual(
+    [...rolePermissionMap[roles.SUPERADMIN]].sort(),
+    [...expectedPermissions].sort(),
+  );
 });
 
 test("evalúa personas con un rol o múltiples roles sin duplicar cuentas", () => {
@@ -606,4 +635,18 @@ test("permisos de inscripción respetan baja definitiva y roles no administrativ
   for (const role of [roles.CAJA, roles.DOCENTE, roles.TUTOR, roles.ALUMNO, roles.ASPIRANTE]) {
     assert.equal(hasPermission([role], permissions.ACADEMIC_ENROLLMENTS_MANAGE), false);
   }
+});
+
+test("permisos documentales quedan cerrados por rol y lectura propia", () => {
+  assert.equal(hasPermission([roles.ALUMNO], permissions.PORTAL_STUDENT_DOCUMENTS_READ_OWN), true);
+  assert.equal(
+    hasPermission([roles.TUTOR], permissions.PORTAL_GUARDIAN_DOCUMENTS_READ_LINKED),
+    true,
+  );
+  assert.equal(hasPermission([roles.TUTOR], permissions.DOCUMENTS_GENERATE), false);
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.DOCUMENTS_REQUESTS_APPROVE),
+    true,
+  );
+  assert.equal(hasPermission([roles.CAJA], permissions.DOCUMENTS_PUBLISH), false);
 });

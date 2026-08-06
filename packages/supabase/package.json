@@ -20,9 +20,17 @@
       "types": "./src/attendance-management.ts",
       "default": "./dist/attendance-management.js"
     },
+    "./academic-documents": {
+      "types": "./src/academic-documents.ts",
+      "default": "./dist/academic-documents.js"
+    },
     "./grade-management": {
       "types": "./src/grade-management.ts",
       "default": "./dist/grade-management.js"
+    },
+    "./guardian-portal": {
+      "types": "./src/guardian-portal.ts",
+      "default": "./dist/guardian-portal.js"
     },
     "./browser": {
       "types": "./src/browser.ts",
@@ -67,6 +75,10 @@
     "./student-enrollment": {
       "types": "./src/student-enrollment.ts",
       "default": "./dist/student-enrollment.js"
+    },
+    "./student-portal": {
+      "types": "./src/student-portal.ts",
+      "default": "./dist/student-portal.js"
     },
     "./ssr": {
       "types": "./src/ssr.ts",

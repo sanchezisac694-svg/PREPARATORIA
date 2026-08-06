@@ -31,7 +31,17 @@ select is((select count(*)::integer from pg_policies where schemaname='academic'
 select is((select count(*)::integer from information_schema.role_table_grants where table_schema='academic' and table_name=any(array['academic_shifts','academic_spaces','schedule_time_blocks','schedule_templates','schedule_template_blocks','teacher_availability','group_schedules','class_sessions','schedule_change_requests','schedule_commands','schedule_events']) and grantee in ('PUBLIC','anon','authenticated')),0,'25 zero grants');
 select ok(not has_schema_privilege('anon','academic','usage'),'26 anon schema denied');
 select ok(not has_schema_privilege('authenticated','academic','usage'),'27 authenticated schema denied');
-select ok(not exists(select 1 from pg_namespace where nspname='public' and oid in(select pronamespace from pg_proc where proname like '%schedule%')),'28 no public schedule functions');
+select is(
+  (
+    select count(*)::integer
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname = 'get_my_student_portal_schedule'
+  ),
+  1,
+  '28 solo existe el wrapper público de horario propio'
+);
 
 select has_column('academic','academic_shifts','created_by_account_id','29 shift actor');
 select has_column('academic','academic_spaces','accessibility_notes_code','30 accessibility code');
