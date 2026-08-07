@@ -73,6 +73,11 @@ import {
 } from "../dist/guardian-portal.js";
 import { createStudentPortalService, studentPortalRpcNames } from "../dist/student-portal.js";
 import {
+  createStudentFinanceService,
+  StudentFinanceError,
+  studentFinanceRpcNames,
+} from "../dist/student-finance.js";
+import {
   AcademicDocumentsError,
   createAcademicDocumentsService,
   createLocalAcademicDocumentFileStore,
@@ -2602,5 +2607,175 @@ test("servicio SSR del portal del tutor consume solo RPCs públicos controlados"
     () => service.getStudentOverview("invalido"),
     (error) =>
       error instanceof GuardianPortalError && error.code === "GUARDIAN_PORTAL_ACCESS_DENIED",
+  );
+});
+
+test("servicio SSR financiero consume solo RPCs públicos controlados y montos decimales", async () => {
+  const calls = [];
+  const service = createStudentFinanceService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async (name, input) => {
+        calls.push({ input, name });
+        if (name === "get_my_student_financial_summary") {
+          return {
+            data: {
+              currencyCode: "MXN",
+              lastUpdatedAt: "2026-08-06T00:00:00.000Z",
+              openChargeCount: 1,
+              paymentCount: 2,
+              totalBalance: "500.00",
+            },
+            error: null,
+          };
+        }
+        if (name === "get_my_student_account_statement") {
+          return {
+            data: {
+              movements: [
+                {
+                  amount: "1000.00",
+                  balance: "500.00",
+                  conceptName: "Inscripción",
+                  createdAt: "2026-08-06T00:00:00.000Z",
+                  effectiveAt: "2026-08-06T00:00:00.000Z",
+                  movementType: "CHARGE",
+                  referenceMasked: null,
+                  status: "POSTED",
+                },
+              ],
+              periodId: "00000000-0000-4000-8000-000000000001",
+              totalBalance: "500.00",
+            },
+            error: null,
+          };
+        }
+        if (name === "get_my_student_charges") {
+          return {
+            data: [
+              {
+                originalAmount: "1000.00",
+                balance: "500.00",
+                conceptName: "Inscripción",
+                effectiveAt: "2026-08-06T00:00:00.000Z",
+                source: "MANUAL",
+                status: "PARTIALLY_PAID",
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "get_my_student_payments") {
+          return {
+            data: [
+              {
+                amount: "500.00",
+                effectiveAt: "2026-08-06T00:00:00.000Z",
+                paymentId: "00000000-0000-4000-8000-000000000002",
+                paymentMethod: "CASH",
+                paymentReferenceMasked: "***1234",
+                receiptNumber: "REC-2026-000001",
+                status: "CONFIRMED",
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "get_my_student_payment") {
+          return {
+            data: {
+              amount: "500.00",
+              effectiveAt: "2026-08-06T00:00:00.000Z",
+              paymentId: "00000000-0000-4000-8000-000000000002",
+              paymentMethod: "CASH",
+              paymentReferenceMasked: "***1234",
+              receiptNumber: "REC-2026-000001",
+              status: "APPLIED",
+              allocations: [
+                {
+                  amount: "500.00",
+                  conceptName: "Inscripción",
+                  effectiveAt: "2026-08-06T00:00:00.000Z",
+                  status: "APPLIED",
+                },
+              ],
+            },
+            error: null,
+          };
+        }
+        if (name === "get_my_student_receipt") {
+          return {
+            data: {
+              amount: "500.00",
+              issuedAt: "2026-08-06T00:00:00.000Z",
+              legend:
+                "Comprobante interno de registro de pago. No constituye CFDI ni comprobante fiscal.",
+              paymentMethod: "CASH",
+              paymentReferenceMasked: "***1234",
+              receiptNumber: "REC-2026-000001",
+              status: "CONFIRMED",
+            },
+            error: null,
+          };
+        }
+        return { data: { error: "FINANCE_SCOPE_DENIED" }, error: null };
+      },
+    }),
+  );
+
+  const periodId = "00000000-0000-4000-8000-000000000001";
+  const paymentId = "00000000-0000-4000-8000-000000000002";
+  const linkId = "00000000-0000-4000-8000-000000000003";
+  await service.getSummary();
+  await service.getAccountStatement(periodId);
+  await service.getCharges(periodId);
+  await service.getPayments();
+  await service.getPayment(paymentId);
+  await service.getReceipt(paymentId);
+  await service.getGuardianSummary(linkId);
+  await service.getGuardianAccountStatement(linkId, periodId);
+
+  assert.deepEqual(studentFinanceRpcNames, [
+    "get_my_student_financial_summary",
+    "get_my_student_account_statement",
+    "get_my_student_charges",
+    "get_my_student_payments",
+    "get_my_student_payment",
+    "get_my_student_receipt",
+    "get_my_guardian_student_financial_summary",
+    "get_my_guardian_student_account_statement",
+  ]);
+  assert.equal(calls.length, 8);
+  assert.deepEqual(calls[1], {
+    input: { requested_period_id: periodId },
+    name: "get_my_student_account_statement",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(calls),
+    /student_record_id|guardian_account_id|account_id|person_id|auth_user_id|from\(|CFDI|Pagar ahora/i,
+  );
+});
+
+test("servicio SSR financiero falla cerrado con UUIDs inválidos y scope denegado", async () => {
+  const service = createStudentFinanceService(
+    validConfig,
+    { getAll: () => [], setAll: () => {} },
+    () => ({
+      rpc: async () => ({ data: { error: "FINANCE_SCOPE_DENIED" }, error: null }),
+    }),
+  );
+
+  await assert.rejects(
+    service.getAccountStatement("periodo-invalido"),
+    (error) => error instanceof StudentFinanceError && error.code === "FINANCE_PERIOD_INVALID",
+  );
+  await assert.rejects(
+    service.getReceipt("pago-invalido"),
+    (error) => error instanceof StudentFinanceError && error.code === "FINANCE_ACCESS_DENIED",
+  );
+  await assert.rejects(
+    service.getGuardianSummary("link-invalido"),
+    (error) => error instanceof StudentFinanceError && error.code === "FINANCE_SCOPE_DENIED",
   );
 });

@@ -67,6 +67,9 @@ export default async function GuardianStudentPage({
           <Card>
             <AppLink href={`/tutor/alumnos/${linkId}/trayectoria`}>Trayectoria</AppLink>
           </Card>
+          <Card>
+            <AppLink href={`/tutor/alumnos/${linkId}/estado-cuenta`}>Estado de cuenta</AppLink>
+          </Card>
         </div>
       </GuardianPortalSection>
     </>

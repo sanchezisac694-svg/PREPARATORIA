@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  23,
-  "Fase 4 debe conservar veintidós migraciones previas y añadir la migración aditiva de documentos académicos",
+  24,
+  "Fase 5 debe conservar veintitrés migraciones previas y añadir la migración aditiva financiera",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -65,6 +65,10 @@ const guardianPortalHardeningMigration = await readFile(
 );
 const academicDocumentsMigration = await readFile(
   join(migrationsDirectory, migrationFiles[22]),
+  "utf8",
+);
+const studentFinanceMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[23]),
   "utf8",
 );
 const institutionalAccessSource = await readFile(
@@ -132,7 +136,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veintitrés migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veinticuatro migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -156,6 +160,7 @@ test("las veintitrés migraciones tienen nombres versionados y transacciones exp
   assert.match(migrationFiles[20], /^\d{14}_guardian_portal_secure_links\.sql$/);
   assert.match(migrationFiles[21], /^\d{14}_guardian_portal_hardening_p0_p1\.sql$/);
   assert.match(migrationFiles[22], /^\d{14}_academic_documents\.sql$/);
+  assert.match(migrationFiles[23], /^\d{14}_create_student_finance_foundation\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -175,6 +180,7 @@ test("las veintitrés migraciones tienen nombres versionados y transacciones exp
     guardianPortalMigration,
     guardianPortalHardeningMigration,
     academicDocumentsMigration,
+    studentFinanceMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

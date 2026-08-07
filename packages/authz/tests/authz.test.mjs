@@ -131,12 +131,28 @@ const expectedPermissions = [
   "documents.templates.manage",
   "documents.types.manage",
   "documents.verify.audit",
+  "finance.accounts.close",
+  "finance.accounts.open",
+  "finance.adjustments.approve",
+  "finance.adjustments.create",
+  "finance.charges.cancel",
+  "finance.charges.create",
+  "finance.charges.post",
+  "finance.concepts.manage",
+  "finance.payments.allocate",
+  "finance.payments.confirm",
+  "finance.payments.register",
+  "finance.payments.reverse",
+  "finance.rates.manage",
+  "finance.receipts.read",
+  "finance.statements.read",
   "grades.manage",
   "grades.read",
   "identity.manage",
   "identity.read",
   "payments.manage",
   "payments.read",
+  "portal.guardian.finance.read_linked",
   "portal.guardian.read_linked_student_attendance",
   "portal.guardian.documents.read_linked",
   "portal.guardian.read_linked_student_grades",
@@ -152,6 +168,7 @@ const expectedPermissions = [
   "portal.guardian_links.review",
   "portal.guardian_links.revoke",
   "portal.guardian_scopes.manage",
+  "portal.student.finance.read_own",
   "portal.student.documents.read_own",
   "reports.export",
   "reports.read",
@@ -285,11 +302,15 @@ test("hasAnyRole y hasAnyPermission rechazan conjuntos esperados vacíos", () =>
 
 test("asigna capacidades por rol sin escalamiento implícito", () => {
   assert.equal(hasPermission([roles.CAJA], permissions.PAYMENTS_MANAGE), true);
+  assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_PAYMENTS_CONFIRM), true);
   assert.equal(hasPermission([roles.CAJA], permissions.GRADES_READ), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.GRADES_MANAGE), true);
   assert.equal(hasPermission([roles.DOCENTE], permissions.IDENTITY_MANAGE), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.ROLES_ASSIGN), false);
   assert.equal(hasPermission([roles.CONTROL_ESCOLAR], permissions.PAYMENTS_MANAGE), false);
+  assert.equal(hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_PAYMENTS_CONFIRM), false);
+  assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGES_POST), true);
+  assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_PAYMENTS_REGISTER), false);
 });
 
 test("solo permite transiciones de cuenta expresamente declaradas", () => {
@@ -639,11 +660,14 @@ test("permisos de inscripción respetan baja definitiva y roles no administrativ
 
 test("permisos documentales quedan cerrados por rol y lectura propia", () => {
   assert.equal(hasPermission([roles.ALUMNO], permissions.PORTAL_STUDENT_DOCUMENTS_READ_OWN), true);
+  assert.equal(hasPermission([roles.ALUMNO], permissions.PORTAL_STUDENT_FINANCE_READ_OWN), true);
   assert.equal(
     hasPermission([roles.TUTOR], permissions.PORTAL_GUARDIAN_DOCUMENTS_READ_LINKED),
     true,
   );
+  assert.equal(hasPermission([roles.TUTOR], permissions.PORTAL_GUARDIAN_FINANCE_READ_LINKED), true);
   assert.equal(hasPermission([roles.TUTOR], permissions.DOCUMENTS_GENERATE), false);
+  assert.equal(hasPermission([roles.TUTOR], permissions.FINANCE_RECEIPTS_READ), false);
   assert.equal(
     hasPermission([roles.CONTROL_ESCOLAR], permissions.DOCUMENTS_REQUESTS_APPROVE),
     true,

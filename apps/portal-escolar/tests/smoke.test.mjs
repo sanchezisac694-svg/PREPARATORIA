@@ -74,6 +74,9 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
     layout,
     service,
     overview,
+    financeStatement,
+    financePayments,
+    financeReceipt,
     record,
     subjects,
     schedule,
@@ -87,6 +90,9 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
     readFile(new URL("../app/alumno/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/student-portal.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/alumno/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/estado-cuenta/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/pagos/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/alumno/pagos/[paymentId]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/alumno/expediente/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/alumno/materias/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/alumno/horario/page.tsx", import.meta.url), "utf8"),
@@ -102,6 +108,9 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
     layout,
     service,
     overview,
+    financeStatement,
+    financePayments,
+    financeReceipt,
     record,
     subjects,
     schedule,
@@ -121,12 +130,19 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
   assert.match(overview, /force-dynamic/);
   assert.match(overview, /revalidate = 0/);
   assert.match(overview, /noStore/);
+  assert.match(financeStatement, /Comprobante interno de registro de pago/);
+  assert.match(financePayments, /No hay pagos en línea ni acciones de “Pagar ahora”/);
+  assert.match(financeReceipt, /No constituye CFDI ni comprobante fiscal/);
   assert.match(schedule, /Docente pendiente de asignación|Docente pendiente de asignaci/);
   assert.match(documents, /Documento informativo generado por el sistema/);
   assert.doesNotMatch(documents + documentDetail, /oficial|SEP|certificado/i);
   assert.doesNotMatch(
     combined,
-    /student_record_id|account_id|person_id|auth_user_id|searchParams|params\.|useSearchParams|localStorage|sessionStorage|createServerActionClient|from\(/i,
+    /student_record_id|account_id|person_id|auth_user_id|searchParams|useSearchParams|localStorage|sessionStorage|createServerActionClient|from\(/i,
+  );
+  assert.doesNotMatch(
+    financeStatement + financePayments + financeReceipt,
+    /CFDI|Pagar ahora|clabe|tarjeta/i,
   );
   assert.doesNotMatch(combined, /DRAFT|UNDER_REVIEW|CAPTURED|REVIEWED|CALCULATED/);
 });
@@ -138,6 +154,7 @@ test("portal del tutor resuelve vínculos server-side y no acepta selectores dir
     overview,
     students,
     studentPage,
+    financePage,
     record,
     schedule,
     attendance,
@@ -150,6 +167,10 @@ test("portal del tutor resuelve vínculos server-side y no acepta selectores dir
     readFile(new URL("../app/tutor/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/tutor/alumnos/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/tutor/alumnos/[linkId]/page.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/tutor/alumnos/[linkId]/estado-cuenta/page.tsx", import.meta.url),
+      "utf8",
+    ),
     readFile(new URL("../app/tutor/alumnos/[linkId]/expediente/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/tutor/alumnos/[linkId]/horario/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/tutor/alumnos/[linkId]/asistencia/page.tsx", import.meta.url), "utf8"),
@@ -170,6 +191,7 @@ test("portal del tutor resuelve vínculos server-side y no acepta selectores dir
     overview,
     students,
     studentPage,
+    financePage,
     record,
     schedule,
     attendance,
@@ -184,6 +206,7 @@ test("portal del tutor resuelve vínculos server-side y no acepta selectores dir
   assert.match(service, /roleCodes\.includes\("TUTOR"\)/);
   assert.match(service, /readSupabasePublicEnv/);
   assert.match(overview, /STANDARD_ACADEMIC_READ/);
+  assert.match(financePage, /FINANCE_SCOPE_DENIED/);
   assert.match(documents + documentDetail, /DOCUMENT_SCOPE_DENIED|deshabilitad/i);
   assert.match(studentPage, /params: Promise<\{ linkId: string \}>/);
   assert.match(studentPage, /const \{ linkId \} = await params;/);
@@ -191,6 +214,7 @@ test("portal del tutor resuelve vínculos server-side y no acepta selectores dir
     combined,
     /student_record_id|guardian_account_id|account_id|person_id|auth_user_id|searchParams|useSearchParams|localStorage|sessionStorage|from\(/i,
   );
+  assert.doesNotMatch(financePage, /saldo|paymentId|account_id|person_id|auth_user_id/i);
 });
 
 test("la verificación pública del documento no expone PII ni descarga directa", async () => {

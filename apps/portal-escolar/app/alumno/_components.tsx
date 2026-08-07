@@ -49,6 +49,8 @@ export function StudentPortalNav() {
       <AppLink href="/alumno/permisos">Permisos</AppLink>
       <AppLink href="/alumno/calificaciones">Calificaciones</AppLink>
       <AppLink href="/alumno/trayectoria">Trayectoria</AppLink>
+      <AppLink href="/alumno/estado-cuenta">Estado de cuenta</AppLink>
+      <AppLink href="/alumno/pagos">Pagos</AppLink>
     </nav>
   );
 }

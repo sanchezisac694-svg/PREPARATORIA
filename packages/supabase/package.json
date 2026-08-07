@@ -80,6 +80,10 @@
       "types": "./src/student-portal.ts",
       "default": "./dist/student-portal.js"
     },
+    "./student-finance": {
+      "types": "./src/student-finance.ts",
+      "default": "./dist/student-finance.js"
+    },
     "./ssr": {
       "types": "./src/ssr.ts",
       "default": "./dist/ssr.js"
