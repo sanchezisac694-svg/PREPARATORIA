@@ -109,6 +109,23 @@ import {
   submitChargeGenerationBatch,
 } from "../dist/charge-generation.js";
 import {
+  addCollectionAction,
+  cancelPaymentCommitment,
+  closeCollectionCase,
+  collectionErrorCodes,
+  collectionOperations,
+  collectionSqlFunctions,
+  CollectionError,
+  createPaymentCommitment,
+  evaluatePaymentCommitment,
+  getStudentDebtPosition,
+  listOverdueStudentAccounts,
+  markPaymentCommitmentBroken,
+  markPaymentCommitmentFulfilled,
+  openCollectionCase,
+  resolveCollectionCase,
+} from "../dist/collections.js";
+import {
   AcademicDocumentsError,
   createAcademicDocumentsService,
   createLocalAcademicDocumentFileStore,
@@ -266,6 +283,7 @@ async function linkFixtureDependencies(fixtureDirectory) {
     "academic-structure.js",
     "academic-scheduling.js",
     "attendance-management.js",
+    "collections.js",
     "grade-management.js",
     "auth-session.js",
     "institutional-access.js",
@@ -3136,5 +3154,214 @@ test("contrato de generación de cargos encapsula errores no controlados", async
       target_rule_version_id: "00000000-0000-4000-8000-000000000202",
     }),
     (error) => error instanceof ChargeGenerationError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+});
+
+test("contrato de cobranza mantiene operaciones, funciones SQL y errores cerrados", () => {
+  assert.deepEqual(collectionOperations, [
+    "GET_DEBT_POSITION",
+    "LIST_OVERDUE",
+    "OPEN_CASE",
+    "ADD_ACTION",
+    "CREATE_COMMITMENT",
+    "EVALUATE_COMMITMENT",
+    "FULFILL_COMMITMENT",
+    "BREAK_COMMITMENT",
+    "CANCEL_COMMITMENT",
+    "RESOLVE_CASE",
+    "CLOSE_CASE",
+  ]);
+  assert.equal(collectionSqlFunctions.GET_DEBT_POSITION, "public.get_student_debt_position");
+  assert.equal(collectionSqlFunctions.CREATE_COMMITMENT, "public.create_payment_commitment");
+  assert.ok(collectionErrorCodes.includes("AAL2_REQUIRED"));
+  assert.ok(collectionErrorCodes.includes("IDEMPOTENCY_CONFLICT"));
+  assert.equal(new Set(collectionErrorCodes).size, collectionErrorCodes.length);
+  assert.doesNotMatch(
+    JSON.stringify({ collectionOperations, collectionSqlFunctions }),
+    /SupabaseClient|from\(|auth\.|storage|realtime|service_role|person_id|auth_user_id/i,
+  );
+});
+
+test("contrato de cobranza usa puerto inyectable y evita filtrar identificadores técnicos", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "00000000-0000-4000-8000-000000000201", status: "OPEN" };
+    },
+    query: async (command) => {
+      calls.push(command);
+      if (command.operation === "GET_DEBT_POSITION") {
+        return {
+          chargeCount: 2,
+          charges: [
+            {
+              agingBucket: "1_30_DAYS",
+              chargeDescription: "Colegiatura",
+              chargeId: "00000000-0000-4000-8000-000000000301",
+              chargeStatus: "PARTIALLY_PAID",
+              debtStatus: "OVERDUE",
+              dueDate: "2099-01-15",
+              originalAmount: "1000.00",
+              outstandingAmount: "500.00",
+            },
+          ],
+          daysPastDue: 22,
+          oldestOverdueDate: "2099-01-15",
+          overdueChargeCount: 1,
+          totalNotDue: "0.00",
+          totalOutstanding: "500.00",
+          totalOverdue: "500.00",
+        };
+      }
+      if (command.operation === "LIST_OVERDUE") {
+        return [
+          {
+            agingBucket: "1_30_DAYS",
+            caseStatus: "OPEN",
+            displayName: "Alumno de prueba",
+            groupName: "1A",
+            institutionalStudentCode: "AL-001",
+            oldestOverdueDate: "2099-01-15",
+            semesterNumber: 1,
+            totalOutstanding: "500.00",
+            totalOverdue: "500.00",
+          },
+        ];
+      }
+      return {
+        appearsBroken: false,
+        canBeMarkedFulfilled: true,
+        isPastDue: false,
+        outstandingCurrent: "0.00",
+        promisedAmount: "500.00",
+        promisedDate: "2099-02-01",
+        qualifyingPaymentsAfterCreated: "500.00",
+      };
+    },
+  };
+
+  await openCollectionCase(
+    port,
+    {
+      requested_opened_reason_code: "OVERDUE_BALANCE",
+      requested_priority: "NORMAL",
+      requested_student_account_id: "00000000-0000-4000-8000-000000000101",
+    },
+    "collections:open:1",
+  );
+  await addCollectionAction(
+    port,
+    {
+      requested_action_status: "RECORDED",
+      requested_action_type: "PHONE_CONTACT",
+      requested_collection_case_id: "00000000-0000-4000-8000-000000000201",
+      requested_contact_channel: "PHONE",
+      requested_occurred_at: "2099-01-20T10:00:00.000Z",
+      requested_summary: "Seguimiento administrativo factual",
+    },
+    "collections:action:1",
+  );
+  await createPaymentCommitment(
+    port,
+    {
+      requested_collection_case_id: "00000000-0000-4000-8000-000000000201",
+      requested_notes: "Compromiso administrativo",
+      requested_promised_amount: "500.00",
+      requested_promised_date: "2099-02-01",
+      requested_student_account_id: "00000000-0000-4000-8000-000000000101",
+    },
+    "collections:commitment:1",
+  );
+  await markPaymentCommitmentFulfilled(
+    port,
+    { requested_commitment_id: "00000000-0000-4000-8000-000000000401" },
+    "collections:fulfill:1",
+  );
+  await markPaymentCommitmentBroken(
+    port,
+    { requested_commitment_id: "00000000-0000-4000-8000-000000000401" },
+    "collections:broken:1",
+  );
+  await cancelPaymentCommitment(
+    port,
+    {
+      requested_commitment_id: "00000000-0000-4000-8000-000000000401",
+      requested_note: "Cancelación administrativa",
+    },
+    "collections:cancel:1",
+  );
+  await resolveCollectionCase(
+    port,
+    { requested_collection_case_id: "00000000-0000-4000-8000-000000000201" },
+    "collections:resolve:1",
+  );
+  await closeCollectionCase(
+    port,
+    {
+      requested_close_reason_code: "BALANCE_SETTLED",
+      requested_collection_case_id: "00000000-0000-4000-8000-000000000201",
+    },
+    "collections:close:1",
+  );
+
+  const debt = await getStudentDebtPosition(port, {
+    business_date: "2099-02-01",
+    student_account_id: "00000000-0000-4000-8000-000000000101",
+  });
+  const overdue = await listOverdueStudentAccounts(port, {
+    requested_limit: 25,
+    requested_search_text: "AL-001",
+  });
+  const evaluation = await evaluatePaymentCommitment(port, {
+    business_date: "2099-02-01",
+    requested_commitment_id: "00000000-0000-4000-8000-000000000401",
+  });
+
+  assert.equal(calls.length, 11);
+  assert.equal(calls[0].sqlFunction, "public.open_collection_case");
+  assert.equal(calls[1].sqlFunction, "public.add_collection_action");
+  assert.equal(calls[2].sqlFunction, "public.create_payment_commitment");
+  assert.equal(calls[3].sqlFunction, "public.mark_payment_commitment_fulfilled");
+  assert.equal(calls[4].sqlFunction, "public.mark_payment_commitment_broken");
+  assert.equal(calls[5].sqlFunction, "public.cancel_payment_commitment");
+  assert.equal(calls[6].sqlFunction, "public.resolve_collection_case");
+  assert.equal(calls[7].sqlFunction, "public.close_collection_case");
+  assert.equal(calls[8].sqlFunction, "public.get_student_debt_position");
+  assert.equal(calls[9].sqlFunction, "public.list_overdue_student_accounts");
+  assert.equal(calls[10].sqlFunction, "public.evaluate_payment_commitment");
+  assert.equal(debt.totalOutstanding, "500.00");
+  assert.equal(overdue[0].institutionalStudentCode, "AL-001");
+  assert.equal(evaluation.canBeMarkedFulfilled, true);
+  assert.doesNotMatch(
+    JSON.stringify({ calls, debt, overdue, evaluation }),
+    /auth_user_id|person_id|phone_number|email_address|medical|password|bank account|card/i,
+  );
+});
+
+test("contrato de cobranza encapsula errores no controlados", async () => {
+  const port = {
+    execute: async () => {
+      throw new Error("synthetic");
+    },
+    query: async () => {
+      throw new Error("synthetic");
+    },
+  };
+
+  await assert.rejects(
+    openCollectionCase(
+      port,
+      {
+        requested_opened_reason_code: "OVERDUE_BALANCE",
+        requested_student_account_id: "00000000-0000-4000-8000-000000000101",
+      },
+      "collections:error:1",
+    ),
+    (error) => error instanceof CollectionError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+  await assert.rejects(
+    getStudentDebtPosition(port, { student_account_id: "00000000-0000-4000-8000-000000000101" }),
+    (error) => error instanceof CollectionError && error.code === "FINANCE_OPERATION_FAILED",
   );
 });

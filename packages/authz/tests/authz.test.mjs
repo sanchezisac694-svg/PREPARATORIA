@@ -151,6 +151,13 @@ const expectedPermissions = [
   "finance.charge-generation.preview",
   "finance.charge-generation.rules.approve",
   "finance.charge-generation.rules.manage",
+  "finance.collections.actions.create",
+  "finance.collections.cases.manage",
+  "finance.collections.cases.open",
+  "finance.collections.cases.read",
+  "finance.collections.commitments.create",
+  "finance.collections.commitments.manage",
+  "finance.collections.reports.read",
   "finance.accounts.close",
   "finance.accounts.open",
   "finance.adjustments.approve",
@@ -329,6 +336,7 @@ test("asigna capacidades por rol sin escalamiento implícito", () => {
     hasPermission([roles.CAJA], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
     false,
   );
+  assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_COLLECTIONS_CASES_OPEN), false);
   assert.equal(hasPermission([roles.CAJA], permissions.GRADES_READ), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.GRADES_MANAGE), true);
   assert.equal(hasPermission([roles.DOCENTE], permissions.IDENTITY_MANAGE), false);
@@ -343,6 +351,14 @@ test("asigna capacidades por rol sin escalamiento implícito", () => {
     hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
     false,
   );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_COLLECTIONS_CASES_READ),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_COLLECTIONS_CASES_MANAGE),
+    false,
+  );
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGES_POST), true);
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_PAYMENTS_REGISTER), false);
   assert.equal(
@@ -351,6 +367,14 @@ test("asigna capacidades por rol sin escalamiento implícito", () => {
   );
   assert.equal(
     hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_COLLECTIONS_CASES_OPEN),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_COLLECTIONS_COMMITMENTS_MANAGE),
     true,
   );
 });

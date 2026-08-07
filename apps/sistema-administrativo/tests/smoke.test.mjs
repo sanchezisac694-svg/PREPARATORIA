@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
-test("login institucional, dashboard, caja, generación de cargos y proxy protegen el Sistema Administrativo", async () => {
+test("login institucional, dashboard, caja, generación de cargos, cobranza y proxy protegen el Sistema Administrativo", async () => {
   const [
     login,
     form,
@@ -19,6 +19,10 @@ test("login institucional, dashboard, caja, generación de cargos y proxy proteg
     rules,
     nuevo,
     batch,
+    collections,
+    overdue,
+    newCase,
+    caseDetail,
   ] = await Promise.all([
     readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
@@ -37,6 +41,10 @@ test("login institucional, dashboard, caja, generación de cargos y proxy proteg
       new URL("../app/finanzas/generacion-cargos/[batchId]/page.tsx", import.meta.url),
       "utf8",
     ),
+    readFile(new URL("../app/finanzas/cobranza/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/finanzas/cobranza/adeudos/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/finanzas/cobranza/nuevo/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/finanzas/cobranza/[caseId]/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(login, /Sistema Administrativo/);
   assert.match(form, /name="identifier"/);
@@ -67,6 +75,12 @@ test("login institucional, dashboard, caja, generación de cargos y proxy proteg
   assert.match(rules, /versiones activas quedan inmutables/i);
   assert.match(nuevo, /preview es obligatorio/i);
   assert.match(batch, /revalida cuenta activa, enrollment elegible, exclusiones y duplicados/i);
+  assert.match(collections, /Cobranza administrativa/);
+  assert.match(collections, /segunda contabilidad/i);
+  assert.match(overdue, /server-side, paginado/i);
+  assert.match(newCase, /saldo vencido derivado/i);
+  assert.match(newCase, /no cambia el saldo/i);
+  assert.match(caseDetail, /alumno y el tutor no deben ver/i);
   assert.doesNotMatch(changeNip, /query|searchParams|localStorage|alias/i);
 });
 

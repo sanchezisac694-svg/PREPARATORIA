@@ -40,6 +40,10 @@
       "types": "./src/cash-register.ts",
       "default": "./dist/cash-register.js"
     },
+    "./collections": {
+      "types": "./src/collections.ts",
+      "default": "./dist/collections.js"
+    },
     "./charge-generation": {
       "types": "./src/charge-generation.ts",
       "default": "./dist/charge-generation.js"
