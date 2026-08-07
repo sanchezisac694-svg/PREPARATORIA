@@ -188,7 +188,10 @@ test("las veinticinco migraciones tienen nombres versionados y transacciones exp
     assert.match(migration, /commit;\s*$/i);
   }
   assert.match(cashRegisterMigration, /^(begin;|do \$\$)/i);
-  assert.match(cashRegisterMigration, /grant execute on function public\.register_cashier_payment/i);
+  assert.match(
+    cashRegisterMigration,
+    /grant execute on function public\.register_cashier_payment/i,
+  );
 });
 
 test("la recuperación MFA administrativa no escribe tablas Auth ni expone RPC", () => {
