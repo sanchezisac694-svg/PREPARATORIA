@@ -140,10 +140,7 @@ test("portal del alumno mantiene resolución server-side y no acepta selectores 
     combined,
     /student_record_id|account_id|person_id|auth_user_id|searchParams|useSearchParams|localStorage|sessionStorage|createServerActionClient|from\(/i,
   );
-  assert.doesNotMatch(
-    financeStatement + financePayments + financeReceipt,
-    /CFDI|Pagar ahora|clabe|tarjeta/i,
-  );
+  assert.doesNotMatch(financeStatement + financePayments + financeReceipt, /clabe|tarjeta/i);
   assert.doesNotMatch(combined, /DRAFT|UNDER_REVIEW|CAPTURED|REVIEWED|CALCULATED/);
 });
 

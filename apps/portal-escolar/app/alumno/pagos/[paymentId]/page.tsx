@@ -22,6 +22,9 @@ export default async function StudentPaymentReceiptPage({
   return (
     <section className="student-portal-stack">
       <h1>Recibo interno</h1>
+      <Alert tone="info">
+        Comprobante interno de registro de pago. No constituye CFDI ni comprobante fiscal.
+      </Alert>
       <Alert tone="info">{receipt.legend}</Alert>
       <Card>
         <h2>{receipt.receiptNumber}</h2>
