@@ -24,7 +24,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  25,
+  26,
   "Fase 5 debe conservar veintitrés migraciones previas y añadir la migración aditiva financiera",
 );
 
@@ -72,6 +72,10 @@ const studentFinanceMigration = await readFile(
   "utf8",
 );
 const cashRegisterMigration = await readFile(join(migrationsDirectory, migrationFiles[24]), "utf8");
+const chargeGenerationMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[25]),
+  "utf8",
+);
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -137,7 +141,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veinticinco migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veintiséis migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -163,6 +167,7 @@ test("las veinticinco migraciones tienen nombres versionados y transacciones exp
   assert.match(migrationFiles[22], /^\d{14}_academic_documents\.sql$/);
   assert.match(migrationFiles[23], /^\d{14}_create_student_finance_foundation\.sql$/);
   assert.match(migrationFiles[24], /^\d{14}_create_cash_register_operations\.sql$/);
+  assert.match(migrationFiles[25], /^\d{14}_create_charge_generation\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -183,6 +188,7 @@ test("las veinticinco migraciones tienen nombres versionados y transacciones exp
     guardianPortalHardeningMigration,
     academicDocumentsMigration,
     studentFinanceMigration,
+    chargeGenerationMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

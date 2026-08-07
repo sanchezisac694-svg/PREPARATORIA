@@ -94,6 +94,21 @@ import {
   registerCashMovement,
 } from "../dist/cash-register.js";
 import {
+  approveChargeGenerationBatch,
+  approveChargeGenerationRuleVersion,
+  chargeGenerationErrorCodes,
+  chargeGenerationOperations,
+  chargeGenerationSqlFunctions,
+  ChargeGenerationError,
+  createChargeGenerationBatch,
+  createChargeGenerationExclusion,
+  createChargeGenerationRule,
+  createChargeGenerationRuleVersion,
+  executeChargeGenerationBatch,
+  previewChargeGeneration,
+  submitChargeGenerationBatch,
+} from "../dist/charge-generation.js";
+import {
   AcademicDocumentsError,
   createAcademicDocumentsService,
   createLocalAcademicDocumentFileStore,
@@ -2966,5 +2981,160 @@ test("contrato de caja encapsula errores no controlados", async () => {
   await assert.rejects(
     getCashRegisters(port),
     (error) => error instanceof CashRegisterError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+});
+
+test("contrato de generación de cargos mantiene operaciones, funciones SQL y errores cerrados", () => {
+  assert.deepEqual(chargeGenerationOperations, [
+    "CREATE_RULE",
+    "CREATE_RULE_VERSION",
+    "APPROVE_RULE_VERSION",
+    "ACTIVATE_RULE_VERSION",
+    "PREVIEW",
+    "CREATE_BATCH",
+    "SUBMIT_BATCH",
+    "APPROVE_BATCH",
+    "EXECUTE_BATCH",
+    "CREATE_EXCLUSION",
+  ]);
+  assert.equal(chargeGenerationSqlFunctions.PREVIEW, "public.preview_charge_generation");
+  assert.equal(
+    chargeGenerationSqlFunctions.EXECUTE_BATCH,
+    "public.execute_charge_generation_batch",
+  );
+  assert.ok(chargeGenerationErrorCodes.includes("CHARGE_GENERATION_BATCH_NOT_APPROVED"));
+  assert.ok(chargeGenerationErrorCodes.includes("AAL2_REQUIRED"));
+  assert.doesNotMatch(
+    JSON.stringify({ chargeGenerationOperations, chargeGenerationSqlFunctions }),
+    /SupabaseClient|from\(|auth\.|storage|realtime|service_role/i,
+  );
+});
+
+test("contrato de generación de cargos usa puerto inyectable y conserva montos decimales como strings", async () => {
+  const calls = [];
+  const preview = {
+    estimatedTotal: "1500.00",
+    items: [
+      {
+        displayName: null,
+        dueDate: "2026-08-31",
+        eligibilityStatus: "ELIGIBLE",
+        groupName: "1A",
+        reasonCode: null,
+        resolvedAmount: "1500.00",
+        resolvedChargeRateId: "00000000-0000-4000-8000-000000000101",
+        semesterNumber: 1,
+        studentIdentifier: "AL-001",
+      },
+    ],
+    totalAlreadyCharged: 0,
+    totalCandidates: 1,
+    totalEligible: 1,
+    totalExcluded: 0,
+    totalManualReview: 0,
+    totalWithoutRate: 0,
+  };
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "00000000-0000-4000-8000-000000000999", status: "APPROVED" };
+    },
+    preview: async (input) => {
+      calls.push({
+        input,
+        operation: "PREVIEW",
+        sqlFunction: chargeGenerationSqlFunctions.PREVIEW,
+      });
+      return preview;
+    },
+  };
+
+  await createChargeGenerationRule(
+    port,
+    { requested_code: "R-INS-2026B", requested_name: "Inscripción 2026-B" },
+    "cg:rule:create:1",
+  );
+  await createChargeGenerationRuleVersion(
+    port,
+    { target_rule_id: "00000000-0000-4000-8000-000000000201" },
+    "cg:version:create:1",
+  );
+  await approveChargeGenerationRuleVersion(
+    port,
+    { target_rule_version_id: "00000000-0000-4000-8000-000000000202" },
+    "cg:version:approve:1",
+  );
+  await previewChargeGeneration(port, {
+    target_academic_period_id: "00000000-0000-4000-8000-000000000203",
+    target_rule_version_id: "00000000-0000-4000-8000-000000000202",
+  });
+  await createChargeGenerationBatch(
+    port,
+    {
+      target_academic_period_id: "00000000-0000-4000-8000-000000000203",
+      target_rule_version_id: "00000000-0000-4000-8000-000000000202",
+    },
+    "cg:batch:create:1",
+  );
+  await submitChargeGenerationBatch(
+    port,
+    { target_batch_id: "00000000-0000-4000-8000-000000000204" },
+    "cg:batch:submit:1",
+  );
+  await approveChargeGenerationBatch(
+    port,
+    { target_batch_id: "00000000-0000-4000-8000-000000000204" },
+    "cg:batch:approve:1",
+  );
+  await executeChargeGenerationBatch(
+    port,
+    { target_batch_id: "00000000-0000-4000-8000-000000000204" },
+    "cg:batch:execute:1",
+  );
+  await createChargeGenerationExclusion(
+    port,
+    { target_student_record_id: "00000000-0000-4000-8000-000000000205" },
+    "cg:exclusion:create:1",
+  );
+
+  assert.equal(calls[0].sqlFunction, "finance.create_charge_generation_rule");
+  assert.equal(calls[1].sqlFunction, "finance.create_charge_generation_rule_version");
+  assert.equal(calls[2].sqlFunction, "finance.approve_charge_generation_rule_version");
+  assert.equal(calls[3].sqlFunction, "public.preview_charge_generation");
+  assert.equal(calls[4].sqlFunction, "public.create_charge_generation_batch");
+  assert.equal(calls[5].sqlFunction, "public.submit_charge_generation_batch");
+  assert.equal(calls[6].sqlFunction, "public.approve_charge_generation_batch");
+  assert.equal(calls[7].sqlFunction, "public.execute_charge_generation_batch");
+  assert.equal(calls[8].sqlFunction, "finance.create_charge_generation_exclusion");
+  assert.equal(preview.estimatedTotal, "1500.00");
+});
+
+test("contrato de generación de cargos encapsula errores no controlados", async () => {
+  const port = {
+    execute: async () => {
+      throw new Error("synthetic");
+    },
+    preview: async () => {
+      throw new Error("synthetic");
+    },
+  };
+
+  await assert.rejects(
+    createChargeGenerationBatch(
+      port,
+      {
+        target_academic_period_id: "00000000-0000-4000-8000-000000000203",
+        target_rule_version_id: "00000000-0000-4000-8000-000000000202",
+      },
+      "cg:error:1",
+    ),
+    (error) => error instanceof ChargeGenerationError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+  await assert.rejects(
+    previewChargeGeneration(port, {
+      target_academic_period_id: "00000000-0000-4000-8000-000000000203",
+      target_rule_version_id: "00000000-0000-4000-8000-000000000202",
+    }),
+    (error) => error instanceof ChargeGenerationError && error.code === "FINANCE_OPERATION_FAILED",
   );
 });

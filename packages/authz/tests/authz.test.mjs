@@ -142,6 +142,15 @@ const expectedPermissions = [
   "finance.cash.sessions.close",
   "finance.cash.sessions.open",
   "finance.cash.sessions.read",
+  "finance.charge-generation.batches.approve",
+  "finance.charge-generation.batches.create",
+  "finance.charge-generation.batches.execute",
+  "finance.charge-generation.batches.read",
+  "finance.charge-generation.batches.review",
+  "finance.charge-generation.exclusions.manage",
+  "finance.charge-generation.preview",
+  "finance.charge-generation.rules.approve",
+  "finance.charge-generation.rules.manage",
   "finance.accounts.close",
   "finance.accounts.open",
   "finance.adjustments.approve",
@@ -316,16 +325,32 @@ test("asigna capacidades por rol sin escalamiento implícito", () => {
   assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_PAYMENTS_CONFIRM), true);
   assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_CASH_SESSIONS_OPEN), true);
   assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_CASH_RECONCILIATION_APPROVE), false);
+  assert.equal(
+    hasPermission([roles.CAJA], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
+    false,
+  );
   assert.equal(hasPermission([roles.CAJA], permissions.GRADES_READ), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.GRADES_MANAGE), true);
   assert.equal(hasPermission([roles.DOCENTE], permissions.IDENTITY_MANAGE), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.ROLES_ASSIGN), false);
   assert.equal(hasPermission([roles.CONTROL_ESCOLAR], permissions.PAYMENTS_MANAGE), false);
   assert.equal(hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_PAYMENTS_CONFIRM), false);
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_CHARGE_GENERATION_PREVIEW),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
+    false,
+  );
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGES_POST), true);
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_PAYMENTS_REGISTER), false);
   assert.equal(
     hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CASH_RECONCILIATION_APPROVE),
+    true,
+  );
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGE_GENERATION_BATCHES_EXECUTE),
     true,
   );
 });
