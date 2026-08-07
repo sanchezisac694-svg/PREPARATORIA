@@ -131,6 +131,17 @@ const expectedPermissions = [
   "documents.templates.manage",
   "documents.types.manage",
   "documents.verify.audit",
+  "finance.cash.assignments.manage",
+  "finance.cash.counts.create",
+  "finance.cash.movements.create",
+  "finance.cash.movements.reverse",
+  "finance.cash.reconciliation.approve",
+  "finance.cash.reconciliation.review",
+  "finance.cash.registers.manage",
+  "finance.cash.reports.read",
+  "finance.cash.sessions.close",
+  "finance.cash.sessions.open",
+  "finance.cash.sessions.read",
   "finance.accounts.close",
   "finance.accounts.open",
   "finance.adjustments.approve",
@@ -303,6 +314,8 @@ test("hasAnyRole y hasAnyPermission rechazan conjuntos esperados vacíos", () =>
 test("asigna capacidades por rol sin escalamiento implícito", () => {
   assert.equal(hasPermission([roles.CAJA], permissions.PAYMENTS_MANAGE), true);
   assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_PAYMENTS_CONFIRM), true);
+  assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_CASH_SESSIONS_OPEN), true);
+  assert.equal(hasPermission([roles.CAJA], permissions.FINANCE_CASH_RECONCILIATION_APPROVE), false);
   assert.equal(hasPermission([roles.CAJA], permissions.GRADES_READ), false);
   assert.equal(hasPermission([roles.DOCENTE], permissions.GRADES_MANAGE), true);
   assert.equal(hasPermission([roles.DOCENTE], permissions.IDENTITY_MANAGE), false);
@@ -311,6 +324,10 @@ test("asigna capacidades por rol sin escalamiento implícito", () => {
   assert.equal(hasPermission([roles.CONTROL_ESCOLAR], permissions.FINANCE_PAYMENTS_CONFIRM), false);
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CHARGES_POST), true);
   assert.equal(hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_PAYMENTS_REGISTER), false);
+  assert.equal(
+    hasPermission([roles.ADMINISTRATIVO], permissions.FINANCE_CASH_RECONCILIATION_APPROVE),
+    true,
+  );
 });
 
 test("solo permite transiciones de cuenta expresamente declaradas", () => {

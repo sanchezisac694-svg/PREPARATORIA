@@ -36,6 +36,10 @@
       "types": "./src/browser.ts",
       "default": "./dist/browser.js"
     },
+    "./cash-register": {
+      "types": "./src/cash-register.ts",
+      "default": "./dist/cash-register.js"
+    },
     "./account-lifecycle": {
       "types": "./src/account-lifecycle.ts",
       "default": "./dist/account-lifecycle.js"

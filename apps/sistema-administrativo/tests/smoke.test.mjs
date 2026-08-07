@@ -3,15 +3,23 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { createSupabaseBrowserClient } from "@preparatoria/supabase/browser";
 
-test("login institucional, dashboard y proxy protegen el Sistema Administrativo", async () => {
-  const [login, form, actions, dashboard, proxy, changeNip] = await Promise.all([
-    readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/seguridad/cambiar-nip/change-nip-form.tsx", import.meta.url), "utf8"),
-  ]);
+test("login institucional, dashboard, caja y proxy protegen el Sistema Administrativo", async () => {
+  const [login, form, actions, dashboard, proxy, changeNip, caja, cobro, arqueo, cierre] =
+    await Promise.all([
+      readFile(new URL("../app/login/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/login/institutional-login-form.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../proxy.ts", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/seguridad/cambiar-nip/change-nip-form.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(new URL("../app/caja/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/caja/cobros/nuevo/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/caja/arqueo/page.tsx", import.meta.url), "utf8"),
+      readFile(new URL("../app/caja/cierre/page.tsx", import.meta.url), "utf8"),
+    ]);
   assert.match(login, /Sistema Administrativo/);
   assert.match(form, /name="identifier"/);
   assert.match(form, /name="nip"/);
@@ -31,6 +39,11 @@ test("login institucional, dashboard y proxy protegen el Sistema Administrativo"
   assert.match(actions, /changeAuthenticatedNip/);
   assert.match(changeNip, /current-password/);
   assert.equal((changeNip.match(/new-password/g) ?? []).length, 2);
+  assert.match(caja, /requireAdminAccess/);
+  assert.match(caja, /Caja escolar/);
+  assert.match(cobro, /navegador no decide qué cuenta cobrar/i);
+  assert.match(arqueo, /El cajero no puede aprobar su propia diferencia/);
+  assert.match(cierre, /CANCELLED permanece fuera del flujo operativo de V1/);
   assert.doesNotMatch(changeNip, /query|searchParams|localStorage|alias/i);
 });
 

@@ -78,6 +78,22 @@ import {
   studentFinanceRpcNames,
 } from "../dist/student-finance.js";
 import {
+  approveCashDifference,
+  beginCashSessionClose,
+  CashRegisterError,
+  cashRegisterErrorCodes,
+  cashRegisterOperations,
+  cashRegisterSqlFunctions,
+  closeCashSession,
+  createCashRegister,
+  getActiveCashSession,
+  getCashRegisters,
+  openCashSession,
+  recordCashCount,
+  registerCashierPayment,
+  registerCashMovement,
+} from "../dist/cash-register.js";
+import {
   AcademicDocumentsError,
   createAcademicDocumentsService,
   createLocalAcademicDocumentFileStore,
@@ -2777,5 +2793,178 @@ test("servicio SSR financiero falla cerrado con UUIDs inválidos y scope denegad
   await assert.rejects(
     service.getGuardianSummary("link-invalido"),
     (error) => error instanceof StudentFinanceError && error.code === "FINANCE_SCOPE_DENIED",
+  );
+});
+
+test("contrato de caja mantiene operaciones, funciones SQL y errores cerrados", () => {
+  assert.deepEqual(cashRegisterOperations, [
+    "GET_CASH_REGISTERS",
+    "GET_ACTIVE_CASH_SESSION",
+    "CREATE_CASH_REGISTER",
+    "ASSIGN_CASHIER_TO_REGISTER",
+    "OPEN_CASH_SESSION",
+    "REGISTER_CASHIER_PAYMENT",
+    "REGISTER_CASH_MOVEMENT",
+    "BEGIN_CASH_SESSION_CLOSE",
+    "RECORD_CASH_COUNT",
+    "CLOSE_CASH_SESSION",
+    "APPROVE_CASH_DIFFERENCE",
+  ]);
+  assert.deepEqual(Object.keys(cashRegisterSqlFunctions), [...cashRegisterOperations]);
+  assert.equal(
+    cashRegisterSqlFunctions.REGISTER_CASHIER_PAYMENT,
+    "public.register_cashier_payment",
+  );
+  assert.ok(cashRegisterErrorCodes.includes("IDEMPOTENCY_CONFLICT"));
+  assert.ok(cashRegisterErrorCodes.includes("AAL2_REQUIRED"));
+  assert.equal(new Set(cashRegisterErrorCodes).size, cashRegisterErrorCodes.length);
+  assert.doesNotMatch(
+    JSON.stringify({ cashRegisterOperations, cashRegisterSqlFunctions }),
+    /SupabaseClient|from\(|auth\.|storage|realtime|service_role/i,
+  );
+});
+
+test("contrato de caja usa puerto inyectable y conserva montos decimales como strings", async () => {
+  const calls = [];
+  const session = {
+    businessDate: "2099-01-15",
+    cashRegisterId: "00000000-0000-4000-8000-000000000101",
+    cashSessionId: "00000000-0000-4000-8000-000000000102",
+    countedCashAmount: null,
+    differenceAmount: null,
+    expectedCashAmount: "650.00",
+    openingAmount: "150.00",
+    status: "OPEN",
+  };
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "00000000-0000-4000-8000-000000000999", status: "RECORDED" };
+    },
+    getActiveSession: async () => session,
+    getRegisters: async () => [
+      {
+        assigned: true,
+        cashRegisterId: "00000000-0000-4000-8000-000000000101",
+        code: "CAJA-01",
+        currencyCode: "MXN",
+        locationLabel: "Recepción",
+        name: "Caja principal",
+        status: "ACTIVE",
+      },
+    ],
+  };
+
+  await createCashRegister(
+    port,
+    { code: "CAJA-01", name: "Caja principal", status: "ACTIVE" },
+    "cash-register:create:1",
+    "00000000-0000-4000-8000-000000000001",
+  );
+  await openCashSession(
+    port,
+    {
+      opening_amount: "150.00",
+      requested_business_date: "2099-01-15",
+      target_register_id: "00000000-0000-4000-8000-000000000101",
+    },
+    "cash-session:open:1",
+  );
+  await registerCashierPayment(
+    port,
+    {
+      account_id: "00000000-0000-4000-8000-000000000201",
+      confirm_operation_key: "cash-payment:confirm:1",
+      register_operation_key: "cash-payment:register:1",
+      requested_amount: "500.00",
+      requested_method: "CASH",
+      session_id: "00000000-0000-4000-8000-000000000102",
+    },
+    "cash-payment:link:1",
+  );
+  await registerCashMovement(
+    port,
+    {
+      amount: "25.00",
+      movement_type: "CASH_WITHDRAWAL",
+      reason_code: "SAFE_DROP",
+      target_session_id: "00000000-0000-4000-8000-000000000102",
+    },
+    "cash-movement:create:1",
+  );
+  await beginCashSessionClose(
+    port,
+    { target_session_id: "00000000-0000-4000-8000-000000000102" },
+    "cash-close:begin:1",
+  );
+  await recordCashCount(
+    port,
+    { counted_amount: "625.00", target_session_id: "00000000-0000-4000-8000-000000000102" },
+    "cash-count:1",
+  );
+  await closeCashSession(
+    port,
+    {
+      difference_note: null,
+      difference_reason_code: null,
+      target_session_id: "00000000-0000-4000-8000-000000000102",
+    },
+    "cash-close:1",
+  );
+  await approveCashDifference(
+    port,
+    { target_session_id: "00000000-0000-4000-8000-000000000102" },
+    "cash-approve:1",
+  );
+
+  const registers = await getCashRegisters(port);
+  const activeSession = await getActiveCashSession(port);
+
+  assert.equal(calls.length, 8);
+  assert.equal(calls[0].sqlFunction, "finance.create_cash_register");
+  assert.equal(calls[1].sqlFunction, "public.open_cash_session");
+  assert.equal(calls[2].sqlFunction, "public.register_cashier_payment");
+  assert.equal(calls[3].sqlFunction, "public.register_cash_movement");
+  assert.equal(calls[4].sqlFunction, "public.begin_cash_session_close");
+  assert.equal(calls[5].sqlFunction, "public.record_cash_count");
+  assert.equal(calls[6].sqlFunction, "public.close_cash_session");
+  assert.equal(calls[7].sqlFunction, "public.approve_cash_difference");
+  assert.equal(registers[0].currencyCode, "MXN");
+  assert.equal(activeSession?.expectedCashAmount, "650.00");
+  assert.equal(typeof activeSession?.openingAmount, "string");
+  assert.doesNotMatch(
+    JSON.stringify({ calls, registers, activeSession }),
+    /SupabaseClient|from\(/i,
+  );
+});
+
+test("contrato de caja encapsula errores no controlados", async () => {
+  const port = {
+    execute: async () => {
+      throw new Error("synthetic");
+    },
+    getActiveSession: async () => {
+      throw new Error("synthetic");
+    },
+    getRegisters: async () => {
+      throw new Error("synthetic");
+    },
+  };
+
+  await assert.rejects(
+    openCashSession(
+      port,
+      {
+        opening_amount: "100.00",
+        requested_business_date: "2099-01-15",
+        target_register_id: "00000000-0000-4000-8000-000000000101",
+      },
+      "cash-session:open:error",
+    ),
+    (error) => error instanceof CashRegisterError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+  await assert.rejects(
+    getCashRegisters(port),
+    (error) => error instanceof CashRegisterError && error.code === "FINANCE_OPERATION_FAILED",
   );
 });

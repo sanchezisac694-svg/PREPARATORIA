@@ -24,7 +24,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  24,
+  25,
   "Fase 5 debe conservar veintitrés migraciones previas y añadir la migración aditiva financiera",
 );
 
@@ -71,6 +71,7 @@ const studentFinanceMigration = await readFile(
   join(migrationsDirectory, migrationFiles[23]),
   "utf8",
 );
+const cashRegisterMigration = await readFile(join(migrationsDirectory, migrationFiles[24]), "utf8");
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -136,7 +137,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veinticuatro migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veinticinco migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -161,6 +162,7 @@ test("las veinticuatro migraciones tienen nombres versionados y transacciones ex
   assert.match(migrationFiles[21], /^\d{14}_guardian_portal_hardening_p0_p1\.sql$/);
   assert.match(migrationFiles[22], /^\d{14}_academic_documents\.sql$/);
   assert.match(migrationFiles[23], /^\d{14}_create_student_finance_foundation\.sql$/);
+  assert.match(migrationFiles[24], /^\d{14}_create_cash_register_operations\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -185,6 +187,8 @@ test("las veinticuatro migraciones tienen nombres versionados y transacciones ex
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
   }
+  assert.match(cashRegisterMigration, /^(begin;|do \$\$)/i);
+  assert.match(cashRegisterMigration, /grant execute on function public\.register_cashier_payment/i);
 });
 
 test("la recuperación MFA administrativa no escribe tablas Auth ni expone RPC", () => {
