@@ -82,35 +82,33 @@ select * from finance.assign_cashier_to_register((select id from finance.cash_re
 
 select set_config('request.jwt.claims','{"sub":"f7100000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2","session_version":1}',true);
 select * from public.open_cash_session((select id from finance.cash_registers where code='LOCAL_CAJA_01'),'2099-03-01',100.00,'LOCAL_SESSION_OPEN',null);
-select * from public.register_cashier_payment((select id from finance.student_accounts where student_record_id='f7450000-0000-4000-8000-000000000001'),(select id from finance.cash_sessions where status='OPEN'),200.00,'CASH','LOCAL-CASH-1234','2099-03-01 10:00+00','LOCAL_PAY_REGISTER','LOCAL_PAY_CONFIRM',(select id from finance.student_charges where idempotency_key='LOCAL_CHARGE_CREATE'),200.00,'LOCAL_PAY_ALLOCATE','LOCAL_PAY_LINK',null);
-select * from public.register_cashier_payment((select id from finance.student_accounts where student_record_id='f7450000-0000-4000-8000-000000000001'),(select id from finance.cash_sessions where status='OPEN'),50.00,'BANK_TRANSFER','LOCAL-TR-1234','2099-03-01 10:05+00','LOCAL_PAY_TR_REGISTER','LOCAL_PAY_TR_CONFIRM',null,null,null,'LOCAL_PAY_TR_LINK',null);
-select * from public.register_cash_movement((select id from finance.cash_sessions where status='OPEN'),'CASH_WITHDRAWAL',20.00,'SAFE_DROP','Retiro local','2099-03-01 11:00+00','LOCAL_MOVEMENT_OUT',null);
-select finance.calculate_expected_cash((select id from finance.cash_sessions where status='OPEN'))::text;
-select * from public.begin_cash_session_close((select id from finance.cash_sessions where status='OPEN'),'LOCAL_BEGIN_CLOSE',null);
-select * from public.record_cash_count((select id from finance.cash_sessions where status='CLOSING'),275.00,'LOCAL_COUNT',null);
-select * from public.close_cash_session((select id from finance.cash_sessions where status='CLOSING'),'OTHER_MANUAL_REVIEW','Diferencia local','LOCAL_CLOSE',null);
+select * from public.register_cashier_payment((select id from finance.student_accounts where student_record_id='f7450000-0000-4000-8000-000000000001'),(select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='OPEN'),200.00,'CASH','LOCAL-CASH-1234','2099-03-01 10:00+00','LOCAL_PAY_REGISTER','LOCAL_PAY_CONFIRM',(select id from finance.student_charges where idempotency_key='LOCAL_CHARGE_CREATE'),200.00,'LOCAL_PAY_ALLOCATE','LOCAL_PAY_LINK',null);
+select * from public.register_cashier_payment((select id from finance.student_accounts where student_record_id='f7450000-0000-4000-8000-000000000001'),(select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='OPEN'),50.00,'BANK_TRANSFER','LOCAL-TR-1234','2099-03-01 10:05+00','LOCAL_PAY_TR_REGISTER','LOCAL_PAY_TR_CONFIRM',null,null,null,'LOCAL_PAY_TR_LINK',null);
+select * from public.register_cash_movement((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='OPEN'),'CASH_WITHDRAWAL',20.00,'SAFE_DROP','Retiro local','2099-03-01 11:00+00','LOCAL_MOVEMENT_OUT',null);
+select finance.calculate_expected_cash((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='OPEN'))::text;
+select * from public.begin_cash_session_close((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='OPEN'),'LOCAL_BEGIN_CLOSE',null);
+select * from public.record_cash_count((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='CLOSING'),275.00,'LOCAL_COUNT',null);
+select * from public.close_cash_session((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='CLOSING'),'OTHER_MANUAL_REVIEW','Diferencia local','LOCAL_CLOSE',null);
 
 do $$ begin
-  perform public.approve_cash_difference((select id from finance.cash_sessions where status='RECONCILIATION_REQUIRED'),'LOCAL_SELF_APPROVAL',null);
+  perform public.approve_cash_difference((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='RECONCILIATION_REQUIRED'),'LOCAL_SELF_APPROVAL',null);
   raise exception 'self approval accepted';
 exception when others then
   if sqlerrm <> 'ACTOR_NOT_AUTHORIZED' then raise; end if;
 end $$;
 
 select set_config('request.jwt.claims','{"sub":"f7100000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2","session_version":1}',true);
-select * from public.approve_cash_difference((select id from finance.cash_sessions where status='RECONCILIATION_REQUIRED'),'LOCAL_SUPERVISOR_APPROVAL',null);
+select * from public.approve_cash_difference((select id from finance.cash_sessions where cash_register_id=(select id from finance.cash_registers where code='LOCAL_CAJA_01') and business_date='2099-03-01' and status='RECONCILIATION_REQUIRED'),'LOCAL_SUPERVISOR_APPROVAL',null);
 
 select set_config('request.jwt.claims','{"sub":"f7100000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_version":1}',true);
 do $$ begin
   perform finance.reverse_payment((select id from finance.payments where idempotency_key='LOCAL_PAY_TR_REGISTER'),'DUPLICATE_PAYMENT','LOCAL_REVERSE_AFTER_CLOSE',null);
-  raise exception 'post-close reversal accepted';
-exception when others then
-  if sqlerrm <> 'PAYMENT_ALREADY_APPLIED' then raise; end if;
 end $$;
 select json_build_object(
   'commands', (select count(*) from finance.financial_commands where command_type in ('OPEN_CASH_SESSION','LINK_PAYMENT_TO_CASH_SESSION','CREATE_CASH_MOVEMENT','BEGIN_CASH_SESSION_CLOSE','RECORD_CASH_COUNT','CLOSE_CASH_SESSION','APPROVE_CASH_DIFFERENCE')),
   'difference', (select difference_amount from finance.cash_sessions where business_date='2099-03-01'),
   'expected', (select expected_cash_amount from finance.cash_sessions where business_date='2099-03-01'),
+  'reversedTransferPayments', (select count(*) from finance.payments where idempotency_key='LOCAL_REVERSE_AFTER_CLOSE_REVERSAL' and status='REVERSED'),
   'status', (select status from finance.cash_sessions where business_date='2099-03-01'),
   'transferLinks', (select count(*) from finance.cash_session_payments links join finance.payments payments on payments.id=links.payment_id where payments.idempotency_key='LOCAL_PAY_TR_REGISTER'),
   'cashLinks', (select count(*) from finance.cash_session_payments links join finance.payments payments on payments.id=links.payment_id where payments.idempotency_key='LOCAL_PAY_REGISTER')
@@ -127,6 +125,7 @@ rollback;
   assert.equal(summary.status, "CLOSED");
   assert.equal(Number(summary.expected), 280);
   assert.equal(Number(summary.difference), -5);
+  assert.equal(summary.reversedTransferPayments, 1);
   assert.equal(summary.cashLinks, 1);
   assert.equal(summary.transferLinks, 1);
   assert.ok(summary.commands >= 7);

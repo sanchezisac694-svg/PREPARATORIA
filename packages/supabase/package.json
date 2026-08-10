@@ -40,6 +40,14 @@
       "types": "./src/cash-register.ts",
       "default": "./dist/cash-register.js"
     },
+    "./financial-period-close": {
+      "types": "./src/financial-period-close.ts",
+      "default": "./dist/financial-period-close.js"
+    },
+    "./financial-reports": {
+      "types": "./src/financial-reports.ts",
+      "default": "./dist/financial-reports.js"
+    },
     "./collections": {
       "types": "./src/collections.ts",
       "default": "./dist/collections.js"
@@ -117,7 +125,7 @@
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm --filter @preparatoria/env build && pnpm --filter @preparatoria/shared build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/supabase.test.mjs"
+    "test": "pnpm --filter @preparatoria/env build && pnpm --filter @preparatoria/shared build && tsc --project tsconfig.build.json && node --conditions=react-server --test tests/*.mjs"
   },
   "dependencies": {
     "@preparatoria/authz": "workspace:*",

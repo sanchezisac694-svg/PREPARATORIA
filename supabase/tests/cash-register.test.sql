@@ -182,10 +182,10 @@ $$ values ('CLOSED'::text) $$,
 );
 
 select set_config('request.jwt.claims','{"sub":"f6100000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2","session_version":1}',true);
-select throws_ok(
-$$ select * from finance.reverse_payment((select id from finance.payments where idempotency_key='CASH_TRANSFER_PAY_REGISTER'),'DUPLICATE_PAYMENT','CASH_REVERSE_AFTER_CLOSE',null) $$,
-'PAYMENT_ALREADY_APPLIED',
-'38 reverso de pago posterior al cierre no reescribe el turno y hoy queda bloqueado por regla financiera heredada'
+select results_eq(
+$$ select status from finance.reverse_payment((select id from finance.payments where idempotency_key='CASH_TRANSFER_PAY_REGISTER'),'DUPLICATE_PAYMENT','CASH_REVERSE_AFTER_CLOSE',null) $$,
+$$ values ('REVERSED'::text) $$,
+'38 reverso de transferencia posterior al cierre se permite sin reescribir el turno histórico'
 );
 select is(
   (select difference_amount::text from finance.cash_sessions where id = (select id from finance.cash_sessions where business_date='2099-03-01')),

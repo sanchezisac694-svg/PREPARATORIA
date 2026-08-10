@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  28,
-  "Fase 5 debe conservar veintisiete migraciones previas y añadir la migración aditiva de becas, descuentos, condonaciones y convenios",
+  29,
+  "Fase 5 debe conservar veintiocho migraciones previas y a?adir la migraci?n aditiva de reportes financieros y cierres de periodo",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -79,6 +79,10 @@ const chargeGenerationMigration = await readFile(
 const collectionsMigration = await readFile(join(migrationsDirectory, migrationFiles[26]), "utf8");
 const financialBenefitsMigration = await readFile(
   join(migrationsDirectory, migrationFiles[27]),
+  "utf8",
+);
+const financialReportsMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[28]),
   "utf8",
 );
 const institutionalAccessSource = await readFile(
@@ -146,7 +150,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veintiocho migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veintinueve migraciones tienen nombres versionados y transacciones expl?citas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -178,6 +182,7 @@ test("las veintiocho migraciones tienen nombres versionados y transacciones expl
     migrationFiles[27],
     /^\d{14}_create_financial_benefits_and_payment_agreements\.sql$/,
   );
+  assert.match(migrationFiles[28], /^\d{14}_create_financial_reports_and_period_closures\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -201,6 +206,7 @@ test("las veintiocho migraciones tienen nombres versionados y transacciones expl
     chargeGenerationMigration,
     collectionsMigration,
     financialBenefitsMigration,
+    financialReportsMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

@@ -95,7 +95,7 @@ select * from finance.apply_authorized_waiver((select id from finance.charge_adj
 select * from finance.reverse_financial_benefit((select id from finance.charge_adjustments where idempotency_key='FBL_WAIVER_CREATE'),'PAYMENT_REVERSAL','Reversal local','FBL_WAIVER_REVERSE',null);
 select (select original_amount::text from finance.student_charges where idempotency_key='FBL_CHARGE')
   || '|' || (select finance.get_charge_balance((select id from finance.student_charges where idempotency_key='FBL_CHARGE'))::text)
-  || '|' || (select count(*)::text from finance.scholarship_applications)
+  || '|' || (select count(*)::text from finance.scholarship_applications where student_scholarship_id = (select id from finance.student_scholarships where created_by_account_id='aba12000-0000-4000-8000-000000000001'))
   || '|' || (select count(*)::text from finance.financial_events where idempotency_key like 'FBL_%');
 rollback;
 `);
