@@ -1,14 +1,23 @@
-import { Card, Container } from "@preparatoria/ui";
+import { PageHeader, SectionCard } from "@preparatoria/ui";
+
 import { MfaEnrollmentForm } from "./mfa-enrollment-form";
 
 export default function ConfigureMfaPage() {
   return (
-    <Container>
-      <Card>
-        <h1>Configurar autenticación reforzada</h1>
-        <p>Usa una aplicación autenticadora TOTP para proteger tu cuenta.</p>
-        <MfaEnrollmentForm />
-      </Card>
-    </Container>
+    <>
+      <PageHeader
+        description="Usa una aplicación autenticadora TOTP para proteger tu cuenta institucional."
+        title="Configurar verificación adicional"
+      />
+
+      <SectionCard
+        description="Prepara tu autenticador y verifica el código para dejarlo activo."
+        title="Nuevo factor"
+      >
+        <div className="security-form-shell">
+          <MfaEnrollmentForm />
+        </div>
+      </SectionCard>
+    </>
   );
 }

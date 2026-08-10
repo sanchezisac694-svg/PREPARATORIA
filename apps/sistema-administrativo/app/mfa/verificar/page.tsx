@@ -1,14 +1,15 @@
-import { Card, Container } from "@preparatoria/ui";
+import { AuthShell, AuthSupportNote } from "../../_auth/auth-shell";
 import { MfaChallengeForm } from "./mfa-challenge-form";
 
 export default function VerifyMfaPage() {
   return (
-    <Container>
-      <Card>
-        <h1>Verificación reforzada</h1>
-        <p>Ingresa el código de tu aplicación autenticadora.</p>
-        <MfaChallengeForm />
-      </Card>
-    </Container>
+    <AuthShell
+      badge="Autenticación reforzada"
+      description="Ingresa el código generado por tu aplicación autenticadora para continuar."
+      help={<AuthSupportNote />}
+      title="Verificar segundo factor"
+    >
+      <MfaChallengeForm />
+    </AuthShell>
   );
 }

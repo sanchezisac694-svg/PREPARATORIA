@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button } from "@preparatoria/ui";
+import { Alert, Button, Field, FormMessage, Input, SectionCard } from "@preparatoria/ui";
+
 import {
   beginMfaEnrollmentAction,
   type MfaActionState,
@@ -18,42 +19,107 @@ export function MfaEnrollmentForm() {
     verifyMfaEnrollmentAction,
     initialMfaState,
   );
+
   return (
-    <>
-      <form action={beginAction}>
-        <label htmlFor="currentNip">NIP actual</label>
-        <input id="currentNip" name="currentNip" type="password" autoComplete="current-password" />
-        <label htmlFor="friendlyName">Nombre del autenticador (opcional)</label>
-        <input id="friendlyName" name="friendlyName" maxLength={60} />
-        <Button disabled={beginning} type="submit">
-          {beginning ? "Preparando…" : "Configurar autenticador"}
-        </Button>
-      </form>
-      {beginState.qrCode ? (
-        <section aria-label="Configuración temporal del autenticador">
-          <p>Escanea este código. No lo guardes ni lo compartas.</p>
-          <img
-            alt="Código QR temporal para configurar el autenticador"
-            src={`data:image/svg+xml;utf-8,${encodeURIComponent(beginState.qrCode)}`}
+    <div className="security-stack">
+      <form action={beginAction} className="security-form">
+        <Field
+          helpText="Se solicitará nuevamente para confirmar que eres tú."
+          label="NIP actual"
+          labelFor="currentNip"
+        >
+          <Input
+            autoComplete="current-password"
+            id="currentNip"
+            name="currentNip"
+            type="password"
           />
-          <label htmlFor="temporarySecret">Clave temporal</label>
-          <input id="temporarySecret" readOnly type="password" value={beginState.secret ?? ""} />
-          <form action={verifyAction}>
-            <label htmlFor="enrollmentCode">Código de seis dígitos</label>
-            <input
-              autoComplete="one-time-code"
-              id="enrollmentCode"
-              inputMode="numeric"
-              name="code"
-              pattern="[0-9]{6}"
-            />
-            <Button disabled={verifying} type="submit">
-              {verifying ? "Verificando…" : "Verificar factor"}
-            </Button>
-          </form>
-        </section>
+        </Field>
+
+        <Field
+          helpText="Te ayudará a reconocer este autenticador dentro de tu cuenta."
+          label="Nombre del autenticador (opcional)"
+          labelFor="friendlyName"
+        >
+          <Input id="friendlyName" maxLength={60} name="friendlyName" type="text" />
+        </Field>
+
+        <div className="security-form__actions">
+          <Button pending={beginning} type="submit">
+            {beginning ? "Preparando…" : "Configurar autenticador"}
+          </Button>
+        </div>
+      </form>
+
+      {beginState.qrCode ? (
+        <SectionCard
+          description="Escanea el código o captura la clave temporal solo para completar la configuración."
+          title="Configurar autenticador"
+        >
+          <Alert tone="warning">
+            Este material es sensible. Úsalo únicamente para registrar tu autenticador y no lo
+            compartas.
+          </Alert>
+
+          <div className="mfa-enrollment">
+            <div className="mfa-enrollment__qr">
+              <img
+                alt="Código QR temporal para configurar el autenticador"
+                src={`data:image/svg+xml;utf-8,${encodeURIComponent(beginState.qrCode)}`}
+              />
+            </div>
+
+            <div className="mfa-enrollment__details">
+              <Field
+                helpText="Si no puedes escanear el QR, ingresa esta clave manualmente en tu aplicación."
+                label="Clave temporal"
+                labelFor="temporarySecret"
+              >
+                <Input
+                  id="temporarySecret"
+                  readOnly
+                  type="password"
+                  value={beginState.secret ?? ""}
+                />
+              </Field>
+
+              <form action={verifyAction} className="security-form">
+                <Field
+                  helpText="Escribe el código generado por tu autenticador para verificarlo."
+                  label="Código de verificación"
+                  labelFor="enrollmentCode"
+                >
+                  <Input
+                    autoComplete="one-time-code"
+                    id="enrollmentCode"
+                    inputMode="numeric"
+                    name="code"
+                    pattern="[0-9]{6}"
+                    placeholder="000000"
+                  />
+                </Field>
+
+                <div className="security-form__actions">
+                  <Button pending={verifying} type="submit">
+                    {verifying ? "Verificando…" : "Verificar factor"}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </SectionCard>
       ) : null}
-      <p aria-live="polite">{beginState.error ?? verifyState.error ?? verifyState.success}</p>
-    </>
+
+      {beginState.error || verifyState.error ? (
+        <FormMessage role="alert" tone="error">
+          {beginState.error ?? verifyState.error}
+        </FormMessage>
+      ) : null}
+      {verifyState.success ? (
+        <FormMessage role="status" tone="success">
+          {verifyState.success}
+        </FormMessage>
+      ) : null}
+    </div>
   );
 }

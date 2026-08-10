@@ -21,6 +21,182 @@ body {
   color: var(--color-text);
 }
 
+.auth-shell {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgb(22 78 99 / 0.18), transparent 24rem),
+    linear-gradient(180deg, rgb(255 255 255 / 0.92), rgb(247 248 250 / 0.98)), var(--color-bg);
+}
+
+.auth-shell__backdrop {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgb(22 78 99 / 0.05), transparent 45%),
+    linear-gradient(315deg, rgb(3 105 161 / 0.04), transparent 40%);
+}
+
+.auth-shell__container {
+  position: relative;
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  padding: var(--space-10) 1rem;
+}
+
+.auth-shell__layout {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.auth-shell__context,
+.auth-shell__panel,
+.auth-shell__copy,
+.auth-form,
+.security-form,
+.security-stack,
+.auth-stack,
+.security-factor-list,
+.security-operation-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.auth-shell__context {
+  align-content: start;
+}
+
+.auth-shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auth-shell__brand p,
+.auth-shell__copy p,
+.auth-shell__help p,
+.auth-shell__footer p,
+.auth-stack p,
+.security-factor-card__body p,
+.security-recovery-intro p,
+.security-operation p,
+.security-summary-grid p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.auth-shell__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.auth-shell__copy h1 {
+  margin: 0;
+  font-size: clamp(1.875rem, 2.8vw, 2.5rem);
+}
+
+.auth-shell__help,
+.auth-shell__footer {
+  padding: var(--space-4);
+  border: 1px solid rgb(203 213 225 / 0.72);
+  border-radius: var(--radius-lg);
+  background: rgb(255 255 255 / 0.68);
+}
+
+.auth-shell__panel {
+  position: relative;
+}
+
+.auth-form__actions,
+.security-form__actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.security-form-shell {
+  width: min(100%, 36rem);
+}
+
+.security-inline-form__controls {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.security-inline-form__controls label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.security-inline-form__controls input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font: inherit;
+}
+
+.security-inline-form__controls input:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.mfa-enrollment {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.mfa-enrollment__qr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: #fff;
+}
+
+.mfa-enrollment__qr img {
+  width: min(100%, 16rem);
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.security-summary-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.security-summary-grid strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  font-size: 1.5rem;
+}
+
+.security-recovery-intro {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.security-operation-grid {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.security-operation {
+  display: grid;
+  gap: var(--space-3);
+}
+
 h1 {
   margin-top: 0;
 }
@@ -333,6 +509,20 @@ a {
 }
 
 @media (min-width: 768px) {
+  .auth-shell__container {
+    padding: var(--space-12) var(--space-6);
+  }
+
+  .auth-shell__layout {
+    grid-template-columns: minmax(18rem, 24rem) minmax(0, 36rem);
+    justify-content: center;
+  }
+
+  .mfa-enrollment {
+    grid-template-columns: minmax(14rem, 16rem) minmax(0, 1fr);
+    align-items: start;
+  }
+
   .dashboard-welcome-card__content {
     grid-template-columns: minmax(0, 1.8fr) minmax(16rem, 1fr);
     align-items: start;

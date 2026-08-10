@@ -1,4 +1,4 @@
-import { Card, Container } from "@preparatoria/ui";
+import { Alert, PageHeader, SectionCard } from "@preparatoria/ui";
 
 import { requireAdminAccess } from "../../../lib/auth";
 import { ChangeNipForm } from "./change-nip-form";
@@ -7,13 +7,25 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   await requireAdminAccess();
+
   return (
-    <Container>
-      <Card>
-        <h1>Cambiar NIP</h1>
-        <p>Confirma tu NIP actual antes de establecer uno nuevo.</p>
-        <ChangeNipForm />
-      </Card>
-    </Container>
+    <>
+      <PageHeader
+        description="Actualiza tu NIP institucional desde una vista protegida y con instrucciones claras."
+        title="Cambiar NIP"
+      />
+
+      <SectionCard
+        description="Confirma tu NIP actual antes de establecer uno nuevo."
+        title="Actualización de acceso"
+      >
+        <Alert tone="info">
+          Mantén tu NIP en privado y evita compartirlo por mensajes o capturas de pantalla.
+        </Alert>
+        <div className="security-form-shell">
+          <ChangeNipForm />
+        </div>
+      </SectionCard>
+    </>
   );
 }

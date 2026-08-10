@@ -14,6 +14,9 @@ import {
   EmptyState,
   ErrorState,
   FormActions,
+  FormMessage,
+  Field,
+  Input,
   LoadingIndicator,
   LoadingState,
   MetricCard,
@@ -21,6 +24,7 @@ import {
   PageContainer,
   PageHeader,
   SectionCard,
+  Select,
   StatusBadge,
   formatDate,
   formatMoney,
@@ -71,6 +75,39 @@ test("Button y AppLink soportan variantes sin romper la API base", () => {
   assert.match(markup, /ui-button--pending/);
   assert.match(markup, /aria-busy="true"/);
   assert.match(markup, /ui-link--button/);
+});
+
+test("Field, Input, Select y FormMessage mantienen semántica accesible", () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      Field,
+      {
+        error: "Campo obligatorio",
+        helpText: "Captura el valor institucional",
+        label: "Identificador",
+        labelFor: "identifier",
+      },
+      createElement(Input, {
+        describedBy: "identifier-help",
+        id: "identifier",
+        invalid: true,
+        name: "identifier",
+        type: "text",
+      }),
+      createElement(Select, { id: "type", name: "type" }, [
+        createElement("option", { key: "a", value: "A" }, "A"),
+      ]),
+      createElement(FormMessage, { tone: "info" }, "Mensaje informativo"),
+    ),
+  );
+
+  assert.match(markup, /<label/);
+  assert.match(markup, /ui-input/);
+  assert.match(markup, /ui-input--invalid/);
+  assert.match(markup, /aria-invalid="true"/);
+  assert.match(markup, /ui-select/);
+  assert.match(markup, /ui-form-message--error/);
+  assert.match(markup, /ui-form-message--info/);
 });
 
 test("formatMoney y Money usan presentación es-MX con MXN", () => {

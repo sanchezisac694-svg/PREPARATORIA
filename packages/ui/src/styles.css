@@ -211,6 +211,96 @@
   color: #713f12;
 }
 
+.ui-field {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ui-field__label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.ui-field__help {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.ui-input,
+.ui-select {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.16s ease,
+    background-color 0.16s ease;
+}
+
+.ui-select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-text-subtle) 50%),
+    linear-gradient(135deg, var(--color-text-subtle) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.1rem) calc(50% - 0.125rem),
+    calc(100% - 0.8rem) calc(50% - 0.125rem);
+  background-repeat: no-repeat;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  padding-right: 2.5rem;
+}
+
+.ui-input::placeholder {
+  color: var(--color-text-subtle);
+}
+
+.ui-input:hover,
+.ui-select:hover {
+  border-color: var(--color-border-strong);
+}
+
+.ui-input:disabled,
+.ui-select:disabled {
+  cursor: not-allowed;
+  background: var(--color-surface-muted);
+  color: var(--color-text-subtle);
+}
+
+.ui-input:focus-visible,
+.ui-select:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+.ui-input--invalid {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.ui-form-message {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.ui-form-message--error {
+  color: #7f1d1d;
+}
+
+.ui-form-message--info {
+  color: var(--color-text-muted);
+}
+
+.ui-form-message--success {
+  color: #14532d;
+}
+
 .ui-loading {
   display: inline-flex;
   align-items: center;

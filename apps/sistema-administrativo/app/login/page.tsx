@@ -1,14 +1,15 @@
-import { Card, Container } from "@preparatoria/ui";
+import { AuthShell, AuthSupportNote } from "../_auth/auth-shell";
 import { InstitutionalLoginForm } from "./institutional-login-form";
 
 export default function Page() {
   return (
-    <Container>
-      <Card>
-        <h1>Sistema Administrativo</h1>
-        <p>Acceso institucional</p>
-        <InstitutionalLoginForm />
-      </Card>
-    </Container>
+    <AuthShell
+      badge="Acceso institucional"
+      description="Ingresa con tus credenciales institucionales para acceder al Sistema Administrativo."
+      help={<AuthSupportNote />}
+      title="Iniciar sesión"
+    >
+      <InstitutionalLoginForm />
+    </AuthShell>
   );
 }
