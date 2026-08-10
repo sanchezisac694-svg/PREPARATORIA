@@ -126,6 +126,39 @@ import {
   resolveCollectionCase,
 } from "../dist/collections.js";
 import {
+  activateScholarshipProgram,
+  activateStudentScholarship,
+  applyAuthorizedDiscount,
+  applyAuthorizedWaiver,
+  applyStudentScholarship,
+  approveAuthorizedWaiver,
+  approveScholarshipProgram,
+  approveStudentScholarship,
+  assignStudentScholarship,
+  createAuthorizedWaiver,
+  createScholarshipProgram,
+  financialBenefitErrorCodes,
+  financialBenefitOperations,
+  financialBenefitSqlFunctions,
+  FinancialBenefitError,
+  reverseFinancialBenefit,
+  revokeStudentScholarship,
+  submitScholarshipProgram,
+  submitStudentScholarship,
+} from "../dist/financial-benefits.js";
+import {
+  approvePaymentAgreement,
+  cancelPaymentAgreement,
+  createPaymentAgreement,
+  evaluatePaymentAgreement,
+  markPaymentAgreementDefaulted,
+  paymentAgreementErrorCodes,
+  paymentAgreementOperations,
+  paymentAgreementSqlFunctions,
+  PaymentAgreementError,
+  reconcilePaymentAgreementInstallment,
+} from "../dist/payment-agreements.js";
+import {
   AcademicDocumentsError,
   createAcademicDocumentsService,
   createLocalAcademicDocumentFileStore,
@@ -3363,5 +3396,240 @@ test("contrato de cobranza encapsula errores no controlados", async () => {
   await assert.rejects(
     getStudentDebtPosition(port, { student_account_id: "00000000-0000-4000-8000-000000000101" }),
     (error) => error instanceof CollectionError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+});
+
+test("contrato de beneficios financieros mantiene operaciones, funciones SQL y errores cerrados", () => {
+  assert.deepEqual(financialBenefitOperations, [
+    "CREATE_SCHOLARSHIP_PROGRAM",
+    "SUBMIT_SCHOLARSHIP_PROGRAM",
+    "APPROVE_SCHOLARSHIP_PROGRAM",
+    "ACTIVATE_SCHOLARSHIP_PROGRAM",
+    "ASSIGN_STUDENT_SCHOLARSHIP",
+    "SUBMIT_STUDENT_SCHOLARSHIP",
+    "APPROVE_STUDENT_SCHOLARSHIP",
+    "ACTIVATE_STUDENT_SCHOLARSHIP",
+    "REVOKE_STUDENT_SCHOLARSHIP",
+    "APPLY_STUDENT_SCHOLARSHIP",
+    "APPLY_AUTHORIZED_DISCOUNT",
+    "CREATE_AUTHORIZED_WAIVER",
+    "APPROVE_AUTHORIZED_WAIVER",
+    "APPLY_AUTHORIZED_WAIVER",
+    "REVERSE_FINANCIAL_BENEFIT",
+  ]);
+  assert.equal(
+    financialBenefitSqlFunctions.APPLY_STUDENT_SCHOLARSHIP,
+    "finance.apply_student_scholarship",
+  );
+  assert.ok(financialBenefitErrorCodes.includes("AAL2_REQUIRED"));
+  assert.ok(financialBenefitErrorCodes.includes("ADJUSTMENT_EXCEEDS_BALANCE"));
+  assert.equal(new Set(financialBenefitErrorCodes).size, financialBenefitErrorCodes.length);
+  assert.doesNotMatch(
+    JSON.stringify({ financialBenefitOperations, financialBenefitSqlFunctions }),
+    /SupabaseClient|from\(|auth\.|storage|realtime|service_role|person_id|auth_user_id/i,
+  );
+});
+
+test("contrato de beneficios financieros usa puerto inyectable", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "00000000-0000-4000-8000-000000009901", status: "ACTIVE" };
+    },
+  };
+
+  await createScholarshipProgram(port, { requested_code: "SCH-001" }, "benefits:create:1");
+  await submitScholarshipProgram(
+    port,
+    { target_program_id: "00000000-0000-4000-8000-000000009902" },
+    "benefits:submit:1",
+  );
+  await approveScholarshipProgram(
+    port,
+    { target_program_id: "00000000-0000-4000-8000-000000009902" },
+    "benefits:approve:1",
+  );
+  await activateScholarshipProgram(
+    port,
+    { target_program_id: "00000000-0000-4000-8000-000000009902" },
+    "benefits:activate:1",
+  );
+  await assignStudentScholarship(
+    port,
+    { target_program_id: "00000000-0000-4000-8000-000000009902" },
+    "benefits:assign:1",
+  );
+  await submitStudentScholarship(
+    port,
+    { target_student_scholarship_id: "00000000-0000-4000-8000-000000009903" },
+    "benefits:ssubmit:1",
+  );
+  await approveStudentScholarship(
+    port,
+    { target_student_scholarship_id: "00000000-0000-4000-8000-000000009903" },
+    "benefits:sapprove:1",
+  );
+  await activateStudentScholarship(
+    port,
+    { target_student_scholarship_id: "00000000-0000-4000-8000-000000009903" },
+    "benefits:sactivate:1",
+  );
+  await applyStudentScholarship(
+    port,
+    {
+      target_charge_id: "00000000-0000-4000-8000-000000009904",
+      target_student_scholarship_id: "00000000-0000-4000-8000-000000009903",
+    },
+    "benefits:apply-scholarship:1",
+  );
+  await applyAuthorizedDiscount(
+    port,
+    { requested_amount: 100, target_charge_id: "00000000-0000-4000-8000-000000009904" },
+    "benefits:discount:1",
+  );
+  await createAuthorizedWaiver(
+    port,
+    { requested_amount: 100, target_charge_id: "00000000-0000-4000-8000-000000009904" },
+    "benefits:waiver:create:1",
+  );
+  await approveAuthorizedWaiver(
+    port,
+    { target_adjustment_id: "00000000-0000-4000-8000-000000009905" },
+    "benefits:waiver:approve:1",
+  );
+  await applyAuthorizedWaiver(
+    port,
+    { target_adjustment_id: "00000000-0000-4000-8000-000000009905" },
+    "benefits:waiver:apply:1",
+  );
+  await reverseFinancialBenefit(
+    port,
+    { target_adjustment_id: "00000000-0000-4000-8000-000000009905" },
+    "benefits:reverse:1",
+  );
+  await revokeStudentScholarship(
+    port,
+    { target_student_scholarship_id: "00000000-0000-4000-8000-000000009903" },
+    "benefits:revoke:1",
+  );
+
+  assert.equal(calls[0].sqlFunction, "finance.create_scholarship_program");
+  assert.equal(calls[8].sqlFunction, "finance.apply_student_scholarship");
+  assert.equal(calls[9].sqlFunction, "finance.apply_authorized_discount");
+  assert.equal(calls[10].sqlFunction, "finance.create_authorized_waiver");
+  assert.equal(calls[13].sqlFunction, "finance.reverse_financial_benefit");
+});
+
+test("contrato de beneficios financieros encapsula errores no controlados", async () => {
+  const port = {
+    execute: async () => {
+      throw new Error("synthetic");
+    },
+  };
+  await assert.rejects(
+    applyAuthorizedDiscount(port, { requested_amount: 1 }, "benefits:error:1"),
+    (error) => error instanceof FinancialBenefitError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+});
+
+test("contrato de convenios mantiene operaciones, funciones SQL y errores cerrados", () => {
+  assert.deepEqual(paymentAgreementOperations, [
+    "CREATE_AGREEMENT",
+    "APPROVE_AGREEMENT",
+    "RECONCILE_INSTALLMENT",
+    "EVALUATE_AGREEMENT",
+    "CANCEL_AGREEMENT",
+    "MARK_AGREEMENT_DEFAULTED",
+  ]);
+  assert.equal(paymentAgreementSqlFunctions.CREATE_AGREEMENT, "public.create_payment_agreement");
+  assert.ok(paymentAgreementErrorCodes.includes("AAL2_REQUIRED"));
+  assert.ok(paymentAgreementErrorCodes.includes("PAYMENT_AGREEMENT_INVALID_STATE"));
+  assert.doesNotMatch(
+    JSON.stringify({ paymentAgreementOperations, paymentAgreementSqlFunctions }),
+    /SupabaseClient|from\(|auth\.|storage|realtime|service_role/i,
+  );
+});
+
+test("contrato de convenios usa puerto inyectable y query separada", async () => {
+  const calls = [];
+  const port = {
+    execute: async (command) => {
+      calls.push(command);
+      return { entityId: "00000000-0000-4000-8000-000000009911", status: "ACTIVE" };
+    },
+    query: async (command) => {
+      calls.push(command);
+      return {
+        evaluationStatus: "ON_TRACK",
+        installmentsDue: 0,
+        installmentsPastDue: 0,
+        nextInstallmentDate: "2099-01-31",
+        remainingAgreementAmount: "500.00",
+        totalFulfilled: "0.00",
+        totalScheduled: "500.00",
+      };
+    },
+  };
+
+  await createPaymentAgreement(
+    port,
+    {
+      requested_agreed_amount: 500,
+      target_student_account_id: "00000000-0000-4000-8000-000000009912",
+    },
+    "agreement:create:1",
+  );
+  await approvePaymentAgreement(
+    port,
+    { target_payment_agreement_id: "00000000-0000-4000-8000-000000009911" },
+    "agreement:approve:1",
+  );
+  await reconcilePaymentAgreementInstallment(
+    port,
+    { target_installment_id: "00000000-0000-4000-8000-000000009913" },
+    "agreement:reconcile:1",
+  );
+  const evaluation = await evaluatePaymentAgreement(port, {
+    target_payment_agreement_id: "00000000-0000-4000-8000-000000009911",
+  });
+  await cancelPaymentAgreement(
+    port,
+    {
+      requested_reason: "synthetic",
+      target_payment_agreement_id: "00000000-0000-4000-8000-000000009911",
+    },
+    "agreement:cancel:1",
+  );
+  await markPaymentAgreementDefaulted(
+    port,
+    {
+      requested_reason: "synthetic",
+      target_payment_agreement_id: "00000000-0000-4000-8000-000000009911",
+    },
+    "agreement:default:1",
+  );
+
+  assert.equal(calls[0].sqlFunction, "public.create_payment_agreement");
+  assert.equal(calls[3].sqlFunction, "public.evaluate_payment_agreement");
+  assert.equal(evaluation.remainingAgreementAmount, "500.00");
+});
+
+test("contrato de convenios encapsula errores no controlados", async () => {
+  const port = {
+    execute: async () => {
+      throw new Error("synthetic");
+    },
+    query: async () => {
+      throw new Error("synthetic");
+    },
+  };
+  await assert.rejects(
+    createPaymentAgreement(port, { requested_agreed_amount: 1 }, "agreement:error:1"),
+    (error) => error instanceof PaymentAgreementError && error.code === "FINANCE_OPERATION_FAILED",
+  );
+  await assert.rejects(
+    evaluatePaymentAgreement(port, {}),
+    (error) => error instanceof PaymentAgreementError && error.code === "FINANCE_OPERATION_FAILED",
   );
 });

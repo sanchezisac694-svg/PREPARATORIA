@@ -44,9 +44,17 @@
       "types": "./src/collections.ts",
       "default": "./dist/collections.js"
     },
+    "./financial-benefits": {
+      "types": "./src/financial-benefits.ts",
+      "default": "./dist/financial-benefits.js"
+    },
     "./charge-generation": {
       "types": "./src/charge-generation.ts",
       "default": "./dist/charge-generation.js"
+    },
+    "./payment-agreements": {
+      "types": "./src/payment-agreements.ts",
+      "default": "./dist/payment-agreements.js"
     },
     "./account-lifecycle": {
       "types": "./src/account-lifecycle.ts",

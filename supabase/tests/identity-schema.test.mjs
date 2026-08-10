@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  27,
-  "Fase 5 debe conservar veintiséis migraciones previas y añadir la migración aditiva de cobranza administrativa",
+  28,
+  "Fase 5 debe conservar veintisiete migraciones previas y añadir la migración aditiva de becas, descuentos, condonaciones y convenios",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -77,6 +77,10 @@ const chargeGenerationMigration = await readFile(
   "utf8",
 );
 const collectionsMigration = await readFile(join(migrationsDirectory, migrationFiles[26]), "utf8");
+const financialBenefitsMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[27]),
+  "utf8",
+);
 const institutionalAccessSource = await readFile(
   join(repositoryRoot, "packages", "supabase", "src", "institutional-access.ts"),
   "utf8",
@@ -142,7 +146,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veintisiete migraciones tienen nombres versionados y transacciones explícitas", () => {
+test("las veintiocho migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -170,6 +174,10 @@ test("las veintisiete migraciones tienen nombres versionados y transacciones exp
   assert.match(migrationFiles[24], /^\d{14}_create_cash_register_operations\.sql$/);
   assert.match(migrationFiles[25], /^\d{14}_create_charge_generation\.sql$/);
   assert.match(migrationFiles[26], /^\d{14}_create_collections\.sql$/);
+  assert.match(
+    migrationFiles[27],
+    /^\d{14}_create_financial_benefits_and_payment_agreements\.sql$/,
+  );
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -192,6 +200,7 @@ test("las veintisiete migraciones tienen nombres versionados y transacciones exp
     studentFinanceMigration,
     chargeGenerationMigration,
     collectionsMigration,
+    financialBenefitsMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);
