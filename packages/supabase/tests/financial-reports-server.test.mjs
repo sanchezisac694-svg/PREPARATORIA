@@ -277,13 +277,11 @@ test("servicio de cierre financiero rechaza parámetros inválidos", async () =>
   await assert.rejects(
     service.get("not-a-uuid"),
     (error) =>
-      error instanceof FinancialPeriodCloseError &&
-      error.code === "FINANCIAL_PERIOD_CLOSE_INVALID",
+      error instanceof FinancialPeriodCloseError && error.code === "FINANCIAL_PERIOD_CLOSE_INVALID",
   );
   await assert.rejects(
     service.create("00000000-0000-4000-8000-000000000101", "bad-date", "CREATE_CLOSE"),
     (error) =>
-      error instanceof FinancialPeriodCloseError &&
-      error.code === "FINANCIAL_PERIOD_CLOSE_INVALID",
+      error instanceof FinancialPeriodCloseError && error.code === "FINANCIAL_PERIOD_CLOSE_INVALID",
   );
 });
