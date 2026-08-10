@@ -1,6 +1,12 @@
 :root {
   color-scheme: light;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   background: var(--ui-background);
   color: var(--ui-text);
 }
@@ -11,13 +17,268 @@
 
 body {
   margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 h1 {
   margin-top: 0;
 }
 
+p,
+li {
+  line-height: 1.5;
+}
+
+a {
+  color: inherit;
+}
+
 .technical-reference {
-  color: #526079;
+  color: var(--color-text-subtle);
   font-size: 0.875rem;
+}
+
+.dashboard-role-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.admin-shell {
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgb(3 105 161 / 0.03), transparent 14rem), var(--color-bg);
+}
+
+.admin-shell__sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 17.5rem;
+  padding: var(--space-6);
+  border-right: 1px solid var(--color-border);
+  background: rgb(255 255 255 / 0.96);
+  box-shadow: var(--shadow-2);
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+}
+
+.admin-shell__sidebar--open {
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.admin-shell__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.admin-shell__brand p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.admin-shell__brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.admin-shell__nav {
+  display: grid;
+  gap: var(--space-6);
+  overflow: auto;
+}
+
+.admin-shell__nav-group {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.admin-shell__nav-group h2 {
+  margin: 0;
+  color: var(--color-text-subtle);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-shell__nav-group ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-shell__nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.admin-shell__nav-link:hover {
+  background: rgb(15 23 42 / 0.04);
+  color: var(--color-text);
+}
+
+.admin-shell__nav-link--active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.admin-shell__icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
+.admin-shell__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  border: 0;
+  background: rgb(15 23 42 / 0.42);
+}
+
+.admin-shell__body {
+  min-height: 100vh;
+}
+
+.admin-shell__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid rgb(203 213 225 / 0.75);
+  background: rgb(247 248 250 / 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.admin-shell__topbar-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.admin-shell__menu-button {
+  margin-top: 0.125rem;
+}
+
+.admin-shell__topbar-copy {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.admin-shell__topbar-copy strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.admin-shell__topbar-copy span {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.admin-shell__topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-shell__main {
+  padding: var(--space-6) var(--space-4) var(--space-10);
+}
+
+.admin-shell .ui-container {
+  width: min(100%, 88rem);
+  margin: 0;
+}
+
+.admin-shell .ui-page-container {
+  width: min(100%, 88rem);
+}
+
+.admin-shell .ui-card + .ui-card,
+.admin-shell .ui-state-card + .ui-card,
+.admin-shell .ui-card + .ui-state-card {
+  margin-top: var(--space-4);
+}
+
+.admin-shell .ui-container > * + * {
+  margin-top: var(--space-4);
+}
+
+@media (min-width: 768px) {
+  .admin-shell__topbar {
+    padding-inline: var(--space-6);
+  }
+
+  .admin-shell__main {
+    padding-inline: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-shell__sidebar {
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+
+  .admin-shell__body {
+    margin-left: 17.5rem;
+  }
+
+  .admin-shell__menu-button,
+  .admin-shell__backdrop {
+    display: none;
+  }
+
+  .admin-shell__topbar {
+    padding-inline: var(--space-8);
+  }
+
+  .admin-shell__main {
+    padding-inline: var(--space-8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-shell__sidebar,
+  .ui-button,
+  .ui-link {
+    transition: none;
+  }
 }

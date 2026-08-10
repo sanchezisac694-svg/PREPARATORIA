@@ -1,4 +1,4 @@
-import { Card } from "@preparatoria/ui";
+import { EmptyState, MetricCard, Money } from "@preparatoria/ui";
 import type { ReactNode } from "react";
 
 export function ReportMetric({
@@ -8,12 +8,17 @@ export function ReportMetric({
   label: string;
   value: ReactNode;
 }>) {
-  return (
-    <Card>
-      <h2>{label}</h2>
-      <p>{value}</p>
-    </Card>
-  );
+  return <MetricCard label={label} value={value} />;
+}
+
+export function ReportMoneyMetric({
+  amount,
+  label,
+}: Readonly<{
+  amount: `${number}` | `${number}.${number}` | `${number}.${number}${number}`;
+  label: string;
+}>) {
+  return <MetricCard label={label} value={<Money amount={amount} />} />;
 }
 
 export function EmptyReport({
@@ -22,9 +27,9 @@ export function EmptyReport({
   title: string;
 }>) {
   return (
-    <Card>
-      <h2>{title}</h2>
-      <p>No hay registros para los filtros técnicos actuales.</p>
-    </Card>
+    <EmptyState
+      description="No hay registros visibles con los filtros técnicos actuales."
+      title={`Sin resultados en ${title.toLowerCase()}`}
+    />
   );
 }
