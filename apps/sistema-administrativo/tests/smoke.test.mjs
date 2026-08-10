@@ -53,7 +53,10 @@ test("login institucional, dashboard, caja, generación de cargos, cobranza y pr
   assert.match(actions, /signInWithInstitutionalCredentials/);
   assert.doesNotMatch(actions, /signInAsApplicant/);
   assert.match(dashboard, /requireAdminAccess/);
-  assert.match(dashboard, /logoutAction/);
+  assert.match(dashboard, /getFinancialReportsService/);
+  assert.match(dashboard, /PageHeader/);
+  assert.match(dashboard, /Accesos rápidos/);
+  assert.doesNotMatch(dashboard, /logoutAction/);
   assert.match(proxy, /refreshSession/);
   assert.match(proxy, /getClaims|refreshSession/);
   assert.doesNotMatch(proxy, /getSession/);

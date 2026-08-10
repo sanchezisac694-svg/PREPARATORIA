@@ -46,6 +46,98 @@ a {
   margin-top: var(--space-3);
 }
 
+.dashboard-eyebrow {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-subtle);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-welcome-card__content,
+.dashboard-role-summary,
+.dashboard-summary-meta,
+.dashboard-action-grid,
+.dashboard-module-grid,
+.dashboard-attention-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dashboard-welcome-card__lead {
+  margin: 0;
+  max-width: 48rem;
+  color: var(--color-text-muted);
+}
+
+.dashboard-role-summary {
+  align-content: start;
+}
+
+.dashboard-role-summary__meta {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.dashboard-metric-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dashboard-action-card,
+.dashboard-module-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.dashboard-action-card__header,
+.dashboard-module-card__header {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.dashboard-action-card__header {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.dashboard-action-card__icon {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--color-primary);
+}
+
+.dashboard-action-card h3,
+.dashboard-module-card h3 {
+  margin: 0;
+}
+
+.dashboard-action-card p,
+.dashboard-module-card p,
+.dashboard-module-card__links span {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.dashboard-module-card__links {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-module-card__links li {
+  display: grid;
+  gap: var(--space-1);
+}
+
 .admin-shell {
   min-height: 100vh;
   background: linear-gradient(180deg, rgb(3 105 161 / 0.03), transparent 14rem), var(--color-bg);
@@ -241,6 +333,17 @@ a {
 }
 
 @media (min-width: 768px) {
+  .dashboard-welcome-card__content {
+    grid-template-columns: minmax(0, 1.8fr) minmax(16rem, 1fr);
+    align-items: start;
+  }
+
+  .dashboard-metric-grid,
+  .dashboard-action-grid,
+  .dashboard-module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .admin-shell__topbar {
     padding-inline: var(--space-6);
   }
@@ -251,6 +354,15 @@ a {
 }
 
 @media (min-width: 1024px) {
+  .dashboard-metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dashboard-action-grid,
+  .dashboard-module-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .admin-shell__sidebar {
     visibility: visible;
     pointer-events: auto;
