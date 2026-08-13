@@ -767,7 +767,14 @@ test("las APIs públicas son limitadas y no exponen capacidades generales del SD
   );
 });
 
-function fakeAuthService({ context, signInError = false, user = { id: "auth-user" } } = {}) {
+function fakeAuthService({
+  context,
+  mfaRequired = false,
+  mfaSatisfied = true,
+  sessionValid,
+  signInError = false,
+  user = { id: "auth-user" },
+} = {}) {
   let signOutCalls = 0;
   let claimsCalls = 0;
   let factoryCalls = 0;
@@ -811,9 +818,9 @@ function fakeAuthService({ context, signInError = false, user = { id: "auth-user
             data: context
               ? [
                   {
-                    mfa_required: false,
-                    mfa_satisfied: true,
-                    session_valid: context.account_status === "ACTIVE",
+                    mfa_required: mfaRequired,
+                    mfa_satisfied: mfaSatisfied,
+                    session_valid: sessionValid ?? context.account_status === "ACTIVE",
                     ...context,
                   },
                 ]
@@ -1090,6 +1097,113 @@ test("una sesión Auth válida conserva el estado DISABLED sin exponer identidad
     },
   );
   assert.deepEqual(result, { error: "ACCOUNT_NOT_ACTIVE", ok: false });
+});
+
+test("login institucional acepta un contexto ACTIVE pre-MFA sin exponer identidad completa", async () => {
+  const { service } = fakeAuthService({
+    context: {
+      account_id: null,
+      account_status: "ACTIVE",
+      allowed_applications: ["SISTEMA_ADMINISTRATIVO"],
+      auth_user_id: "auth-user",
+      person_id: null,
+      role_codes: [],
+    },
+    mfaRequired: true,
+    mfaSatisfied: false,
+    sessionValid: true,
+  });
+  const result = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "SISTEMA_ADMINISTRATIVO",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: "ADM-0001",
+      identifierType: "ADMINISTRATIVE_ID",
+      ipAddress: "127.0.0.1",
+      nip: "Secret01!",
+    },
+    {
+      attempts: createInMemoryAuthenticationAttemptGuard(),
+      authentication: service,
+    },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.identity.context.accountStatus, "ACTIVE");
+  assert.equal(result.identity.context.accountId, null);
+  assert.equal(result.identity.context.personId, null);
+  assert.deepEqual(result.identity.context.roleCodes, []);
+  assert.deepEqual(result.identity.context.allowedApplications, ["SISTEMA_ADMINISTRATIVO"]);
+  assert.equal(result.identity.context.sessionValid, true);
+  assert.equal(result.identity.context.mfaRequired, true);
+  assert.equal(result.identity.context.mfaSatisfied, false);
+});
+
+test("login institucional no trata MFA pendiente como ACCOUNT_NOT_ACTIVE si la aplicación está permitida", async () => {
+  const { service } = fakeAuthService({
+    context: {
+      account_id: null,
+      account_status: "ACTIVE",
+      allowed_applications: ["PORTAL_ESCOLAR"],
+      auth_user_id: "auth-user",
+      person_id: null,
+      role_codes: [],
+    },
+    mfaRequired: true,
+    mfaSatisfied: false,
+    sessionValid: true,
+  });
+  const result = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "SISTEMA_ADMINISTRATIVO",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: "EMP-0001",
+      identifierType: "EMPLOYEE_ID",
+      ipAddress: "127.0.0.1",
+      nip: "Secret01!",
+    },
+    {
+      attempts: createInMemoryAuthenticationAttemptGuard(),
+      authentication: service,
+    },
+  );
+
+  assert.deepEqual(result, { error: "APPLICATION_NOT_ALLOWED", ok: false });
+});
+
+test("login institucional rechaza sesión inválida aunque la cuenta esté ACTIVE", async () => {
+  const { service } = fakeAuthService({
+    context: {
+      account_id: "account",
+      account_status: "ACTIVE",
+      allowed_applications: ["SISTEMA_ADMINISTRATIVO"],
+      auth_user_id: "auth-user",
+      person_id: "person",
+      role_codes: ["SUPERADMIN"],
+    },
+    mfaRequired: true,
+    mfaSatisfied: false,
+    sessionValid: false,
+  });
+  const result = await signInWithInstitutionalCredentials(
+    {
+      aliasDomain: "identidad.sistema-preparatoria.invalid",
+      application: "SISTEMA_ADMINISTRATIVO",
+      attemptSalt: "synthetic-attempt-salt-with-at-least-32-characters",
+      identifier: "ADM-0002",
+      identifierType: "ADMINISTRATIVE_ID",
+      ipAddress: "127.0.0.1",
+      nip: "Secret01!",
+    },
+    {
+      attempts: createInMemoryAuthenticationAttemptGuard(),
+      authentication: service,
+    },
+  );
+
+  assert.deepEqual(result, { error: "INVALID_CREDENTIALS", ok: false });
 });
 
 test("login de aspirante permanece separado y usa mensaje genérico", async () => {
@@ -1745,15 +1859,31 @@ function activeMfaIdentity(application = "PORTAL_ESCOLAR") {
 }
 
 test("enrolamiento TOTP entrega material sensible solo en resultado efímero", async () => {
+  const calls = [];
   const auth = {
-    enrollTotp: async () => ({
-      factorId: "synthetic-factor",
+    listFactors: async () => ({
+      factors: [
+        { id: "verified-factor", status: "verified" },
+        { id: "stale-factor-a", status: "unverified" },
+        { id: "stale-factor-b", status: "unverified" },
+      ],
       ok: true,
-      qrCode: "<svg>synthetic</svg>",
-      secret: "synthetic-secret",
-      sensitive: true,
-      uri: "otpauth://synthetic",
     }),
+    unenrollFactor: async (factorId) => {
+      calls.push(`clear:${factorId}`);
+      return { ok: true };
+    },
+    enrollTotp: async () => {
+      calls.push("enroll");
+      return {
+        factorId: "synthetic-factor",
+        ok: true,
+        qrCode: "<svg>synthetic</svg>",
+        secret: "synthetic-secret",
+        sensitive: true,
+        uri: "otpauth://synthetic",
+      };
+    },
   };
   const result = await beginTotpEnrollment(
     {
@@ -1765,12 +1895,37 @@ test("enrolamiento TOTP entrega material sensible solo en resultado efímero", a
   );
   assert.equal(result.factorId, "synthetic-factor");
   assert.equal(Object.isFrozen(result), true);
+  assert.deepEqual(calls, ["clear:stale-factor-a", "clear:stale-factor-b", "enroll"]);
   await assert.rejects(
     beginTotpEnrollment(
       { application: "PORTAL_ESCOLAR", recentlyReauthenticated: false },
       { auth, identity: activeMfaIdentity() },
     ),
     (error) => error.code === "MFA_AAL2_REQUIRED",
+  );
+});
+
+test("enrolamiento TOTP falla si no puede limpiar factores pendientes residuales", async () => {
+  await assert.rejects(
+    beginTotpEnrollment(
+      {
+        application: "SISTEMA_ADMINISTRATIVO",
+        friendlyName: "DEMO-ADMIN",
+        recentlyReauthenticated: true,
+      },
+      {
+        auth: {
+          enrollTotp: async () => ({ ok: false }),
+          listFactors: async () => ({
+            factors: [{ id: "stale-factor", status: "unverified" }],
+            ok: true,
+          }),
+          unenrollFactor: async () => ({ ok: false }),
+        },
+        identity: activeMfaIdentity("SISTEMA_ADMINISTRATIVO"),
+      },
+    ),
+    (error) => error.code === "MFA_UNENROLL_FAILED",
   );
 });
 

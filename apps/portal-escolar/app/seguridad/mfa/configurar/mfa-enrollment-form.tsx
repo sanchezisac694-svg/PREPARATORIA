@@ -10,6 +10,13 @@ import {
   verifyMfaEnrollmentAction,
 } from "../../../actions";
 
+function resolveQrImageSrc(qrCode: string): string {
+  const trimmed = qrCode.trimStart();
+  if (trimmed.startsWith("data:")) return qrCode;
+  if (trimmed.startsWith("<svg")) return `data:image/svg+xml;utf-8,${encodeURIComponent(qrCode)}`;
+  return qrCode;
+}
+
 export function MfaEnrollmentForm() {
   const initialMfaState: MfaActionState = {};
   const [beginState, beginAction, beginning] = useActionState(
@@ -36,11 +43,12 @@ export function MfaEnrollmentForm() {
           <p>Escanea este código. No lo guardes ni lo compartas.</p>
           <img
             alt="Código QR temporal para configurar el autenticador"
-            src={`data:image/svg+xml;utf-8,${encodeURIComponent(beginState.qrCode)}`}
+            src={resolveQrImageSrc(beginState.qrCode)}
           />
           <label htmlFor="temporarySecret">Clave temporal</label>
           <input id="temporarySecret" readOnly type="password" value={beginState.secret ?? ""} />
           <form action={verifyAction}>
+            <input name="factorId" type="hidden" value={beginState.factorId ?? ""} />
             <label htmlFor="enrollmentCode">Código de seis dígitos</label>
             <input
               autoComplete="one-time-code"

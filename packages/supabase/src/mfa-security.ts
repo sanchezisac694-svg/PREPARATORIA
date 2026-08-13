@@ -239,6 +239,17 @@ async function requireAal2(auth: AuthMfaPort): Promise<void> {
   }
 }
 
+async function clearPendingTotpEnrollments(auth: AuthMfaPort): Promise<void> {
+  const factors = await auth.listFactors();
+  if (!factors.ok) throw new MfaSecurityError("MFA_PROVIDER_RESULT_UNKNOWN");
+  for (const factor of factors.factors) {
+    if (factor.status !== "unverified") continue;
+    if (!(await auth.unenrollFactor(factor.id)).ok) {
+      throw new MfaSecurityError("MFA_UNENROLL_FAILED");
+    }
+  }
+}
+
 export async function beginTotpEnrollment(
   command: {
     readonly application: Application;
@@ -251,6 +262,7 @@ export async function beginTotpEnrollment(
   if (!command.recentlyReauthenticated) {
     throw new MfaSecurityError("MFA_AAL2_REQUIRED");
   }
+  await clearPendingTotpEnrollments(dependencies.auth);
   const result = await dependencies.auth.enrollTotp(validateFriendlyName(command.friendlyName));
   if (!result.ok) throw new MfaSecurityError("MFA_ENROLLMENT_FAILED");
   return Object.freeze({

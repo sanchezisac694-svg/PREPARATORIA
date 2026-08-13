@@ -10,6 +10,7 @@
   },
   "scripts": {
     "dev": "turbo run dev",
+    "demo:admin": "node --conditions=react-server scripts/create-local-demo-admin.mjs",
     "build": "turbo run build",
     "lint": "eslint eslint.config.mjs prettier.config.mjs \".github/**/*.mjs\" \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.{ts,tsx,mjs}\" \"supabase/**/*.mjs\"",
     "typecheck": "turbo run typecheck",

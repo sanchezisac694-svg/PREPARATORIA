@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
 
+import { applications } from "../../packages/authz/dist/index.js";
 import { createAuthenticationService } from "../../packages/supabase/dist/auth-session.js";
+import { beginTotpEnrollment } from "../../packages/supabase/dist/mfa-security.js";
 import { createLocalPrivilegedAuthMfaAdministrationAdapter } from "../../packages/supabase/dist/mfa-administration-local.js";
 
 const rawApiUrl = process.env.LOCAL_SUPABASE_URL;
@@ -243,6 +245,63 @@ try {
   assert.equal((await secondSession.getAuthenticatorAssuranceLevel()).currentLevel, "aal2");
   assert.equal((await secondSession.getAuthenticatedIdentity()).ok, true);
 
+  const staleEnrollment = await beginTotpEnrollment(
+    {
+      application: applications.SISTEMA_ADMINISTRATIVO,
+      friendlyName: "Pendiente",
+      recentlyReauthenticated: true,
+    },
+    { auth: secondSession, identity: { getIdentity: secondSession.getAuthenticatedIdentity } },
+  );
+  const staleCode = totp(staleEnrollment.secret);
+  const invalidRetryCode = `${(Number(staleCode) + 1) % 1_000_000}`.padStart(6, "0");
+  assert.equal(
+    (
+      await secondSession.challengeAndVerify({
+        factorId: staleEnrollment.factorId,
+        code: invalidRetryCode,
+      })
+    ).ok,
+    false,
+  );
+  assert.equal(
+    (
+      await secondSession.challengeAndVerify({
+        factorId: staleEnrollment.factorId,
+        code: staleCode,
+      })
+    ).ok,
+    true,
+  );
+
+  const backupPending = await beginTotpEnrollment(
+    {
+      application: applications.SISTEMA_ADMINISTRATIVO,
+      friendlyName: "Residual",
+      recentlyReauthenticated: true,
+    },
+    {
+      auth: secondSession,
+      identity: { getIdentity: secondSession.getAuthenticatedIdentity },
+    },
+  );
+  const replacementPending = await beginTotpEnrollment(
+    {
+      application: applications.SISTEMA_ADMINISTRATIVO,
+      friendlyName: "Residual",
+      recentlyReauthenticated: true,
+    },
+    {
+      auth: secondSession,
+      identity: { getIdentity: secondSession.getAuthenticatedIdentity },
+    },
+  );
+  assert.notEqual(replacementPending.factorId, backupPending.factorId);
+  const pendingFactors = (await secondSession.listFactors()).factors.filter(
+    (factor) => factor.status === "unverified",
+  );
+  assert.equal(pendingFactors.length, 1);
+
   const requestKey = randomUUID();
   const approvalKey = randomUUID();
   const executionKey = randomUUID();
@@ -276,6 +335,11 @@ try {
   );
   assert.equal(
     (await localAdministration.deleteUserFactor(fixture.authUserId, verifiedFactors[0].id)).outcome,
+    "deleted",
+  );
+  assert.equal(
+    (await localAdministration.deleteUserFactor(fixture.authUserId, staleEnrollment.factorId))
+      .outcome,
     "deleted",
   );
   assert.deepEqual(await localAdministration.inspectUserMfaState(fixture.authUserId), {

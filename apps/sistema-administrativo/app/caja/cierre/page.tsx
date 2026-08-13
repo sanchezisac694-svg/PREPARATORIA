@@ -1,30 +1,76 @@
-import { Alert, Card, Container } from "@preparatoria/ui";
+import { Alert, Button, Card, Container, PageHeader } from "@preparatoria/ui";
+
+import { FinancialActionFeedback, readFeedback } from "../../_admin/financial-feedback";
+import { FinancialStatusBadge } from "../../_admin/financial-labels";
+import { approveCashDifferenceAction, closeCashSessionAction } from "../actions";
 import { requireAdminAccess } from "../../../lib/auth";
+import { getCashRegisterAdapter } from "../../../lib/cash-register";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export default async function CajaCierrePage() {
+export default async function CajaCierrePage({
+  searchParams,
+}: Readonly<{
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}>) {
   await requireAdminAccess();
+  const [{ activeSession }, params] = await Promise.all([
+    getCashRegisterAdapter().then((adapter) => adapter.getOverview()),
+    searchParams ?? Promise.resolve({}),
+  ]);
+  const feedback = readFeedback(params);
 
   return (
     <Container>
-      <Card>
-        <h1>Cierre de turno</h1>
-        <p>El cierre persiste un snapshot final y nunca reescribe historia de sesiones cerradas.</p>
-      </Card>
+      <PageHeader
+        description="Cierre y aprobación segregada de diferencias del turno visible."
+        title="Cierre de caja"
+      />
 
-      <Card>
-        <h2>Reglas críticas</h2>
-        <ul>
-          <li>OPEN → CLOSING bloquea nuevos vínculos de pago y movimientos.</li>
-          <li>Difference = 0: conciliación balanceada y cierre inmediato.</li>
-          <li>Difference ≠ 0: RECONCILIATION_REQUIRED y aprobación segregada.</li>
-          <li>
-            Reversos posteriores afectan el momento operativo futuro, no el snapshot histórico.
-          </li>
-        </ul>
-        <Alert tone="warning">CANCELLED permanece fuera del flujo operativo de V1.</Alert>
-      </Card>
+      <FinancialActionFeedback {...feedback} />
+
+      {!activeSession ? (
+        <Card>
+          <Alert tone="warning">No existe un turno visible para cerrar o conciliar.</Alert>
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <h2>Estado del turno</h2>
+            <ul>
+              <li>
+                Estado: <FinancialStatusBadge value={activeSession.status} />
+              </li>
+              <li>Diferencia visible: {activeSession.differenceAmount ?? "No calculada"}</li>
+              <li>Conteo registrado: {activeSession.countedCashAmount ?? "Pendiente"}</li>
+              <li>CANCELLED permanece fuera del flujo operativo de V1.</li>
+            </ul>
+          </Card>
+
+          <Card>
+            <h2>Registrar cierre</h2>
+            <form action={closeCashSessionAction}>
+              <input type="hidden" name="targetSessionId" value={activeSession.cashSessionId} />
+              <Button type="submit">Registrar cierre</Button>
+            </form>
+          </Card>
+
+          <Card>
+            <h2>Aprobar diferencia</h2>
+            <Alert tone="info">
+              Usa esta acción solo cuando el backend ya marcó que la diferencia requiere aprobación
+              segregada.
+            </Alert>
+            <form action={approveCashDifferenceAction}>
+              <input type="hidden" name="targetSessionId" value={activeSession.cashSessionId} />
+              <Button type="submit" variant="secondary">
+                Aprobar diferencia
+              </Button>
+            </form>
+          </Card>
+        </>
+      )}
     </Container>
   );
 }

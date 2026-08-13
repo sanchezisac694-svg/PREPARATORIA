@@ -426,6 +426,103 @@ export function MetricCard({ description, icon, label, value }: MetricCardProps)
   );
 }
 
+type DataTableProps = Readonly<
+  HTMLAttributes<HTMLDivElement> & {
+    caption?: ReactNode;
+    emptyState?: ReactNode;
+    tableClassName?: string;
+  }
+>;
+
+export function DataTable({
+  caption,
+  children,
+  className = "",
+  emptyState,
+  tableClassName = "",
+  ...props
+}: DataTableProps) {
+  return (
+    <div className={classes("ui-table-wrapper", className)} {...props}>
+      <table className={classes("ui-table", tableClassName)}>
+        {caption ? <caption>{caption}</caption> : null}
+        {children}
+      </table>
+      {emptyState ? <div className="ui-table-empty">{emptyState}</div> : null}
+    </div>
+  );
+}
+
+type TableSectionProps = Readonly<HTMLAttributes<HTMLTableSectionElement>>;
+
+export function TableHeadSection({ className = "", ...props }: TableSectionProps) {
+  return <thead className={classes("ui-table__head", className)} {...props} />;
+}
+
+export function TableBodySection({ className = "", ...props }: TableSectionProps) {
+  return <tbody className={classes("ui-table__body", className)} {...props} />;
+}
+
+type TableRowProps = Readonly<HTMLAttributes<HTMLTableRowElement>>;
+
+export function TableRow({ className = "", ...props }: TableRowProps) {
+  return <tr className={classes("ui-table__row", className)} {...props} />;
+}
+
+type TableCellProps = Readonly<
+  HTMLAttributes<HTMLTableCellElement> & {
+    align?: "center" | "left" | "right";
+  }
+>;
+
+export function TableCell({ align = "left", className = "", ...props }: TableCellProps) {
+  return (
+    <td className={classes("ui-table__cell", `ui-table__cell--${align}`, className)} {...props} />
+  );
+}
+
+type TableHeadCellProps = Readonly<
+  HTMLAttributes<HTMLTableCellElement> & {
+    align?: "center" | "left" | "right";
+    scope?: "col" | "row";
+  }
+>;
+
+export function TableHeadCell({
+  align = "left",
+  className = "",
+  scope = "col",
+  ...props
+}: TableHeadCellProps) {
+  return (
+    <th
+      className={classes("ui-table__head-cell", `ui-table__cell--${align}`, className)}
+      scope={scope}
+      {...props}
+    />
+  );
+}
+
+type DescriptionListProps = Readonly<HTMLAttributes<HTMLDListElement>>;
+
+export function DescriptionList({ className = "", ...props }: DescriptionListProps) {
+  return <dl className={classes("ui-description-list", className)} {...props} />;
+}
+
+type DescriptionItemProps = Readonly<{
+  label: ReactNode;
+  value: ReactNode;
+}>;
+
+export function DescriptionItem({ label, value }: DescriptionItemProps) {
+  return (
+    <div className="ui-description-list__item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
 type FormActionsProps = Readonly<{
   primary: ReactNode;
   secondary?: ReactNode;

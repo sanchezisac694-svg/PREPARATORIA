@@ -71,7 +71,7 @@ test("las superficies de seguridad autenticada usan copy en español y component
   assert.match(recoveryDetail, /Solicitud de recuperación MFA/);
   assert.doesNotMatch(
     mfaPage + configurePage + enrollmentForm + recoveryList + recoveryNew + recoveryDetail,
-    /challenge|factorId|aal|session_version|claim|recovery request/gi,
+    /challenge|aal|session_version|claim|recovery request/gi,
   );
 });
 
@@ -88,4 +88,18 @@ test("los estados de acceso usan copy claro y CTAs seguros", async () => {
   assert.match(expired, /Iniciar sesión/);
   assert.match(accountState, /Estado de acceso de la cuenta/);
   assert.doesNotMatch(unavailable + unauthorized + expired + accountState, /403|JWT|AAL|token/i);
+});
+
+test("la verificación de enrolamiento MFA conserva el factor temporal exacto", async () => {
+  const [actions, enrollmentForm] = await Promise.all([
+    readFile(new URL("../app/actions.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/seguridad/mfa/configurar/mfa-enrollment-form.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+
+  assert.match(actions, /formData\.get\("factorId"\)/);
+  assert.match(actions, /candidate\.id === factorId && candidate\.status === "unverified"/);
+  assert.match(enrollmentForm, /name="factorId"/);
 });

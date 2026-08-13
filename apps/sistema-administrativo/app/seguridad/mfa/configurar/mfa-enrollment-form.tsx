@@ -9,6 +9,13 @@ import {
   verifyMfaEnrollmentAction,
 } from "../../../actions";
 
+function resolveQrImageSrc(qrCode: string): string {
+  const trimmed = qrCode.trimStart();
+  if (trimmed.startsWith("data:")) return qrCode;
+  if (trimmed.startsWith("<svg")) return `data:image/svg+xml;utf-8,${encodeURIComponent(qrCode)}`;
+  return qrCode;
+}
+
 export function MfaEnrollmentForm() {
   const initialMfaState: MfaActionState = {};
   const [beginState, beginAction, beginning] = useActionState(
@@ -65,7 +72,7 @@ export function MfaEnrollmentForm() {
             <div className="mfa-enrollment__qr">
               <img
                 alt="Código QR temporal para configurar el autenticador"
-                src={`data:image/svg+xml;utf-8,${encodeURIComponent(beginState.qrCode)}`}
+                src={resolveQrImageSrc(beginState.qrCode)}
               />
             </div>
 
@@ -84,6 +91,7 @@ export function MfaEnrollmentForm() {
               </Field>
 
               <form action={verifyAction} className="security-form">
+                <input name="factorId" type="hidden" value={beginState.factorId ?? ""} />
                 <Field
                   helpText="Escribe el código generado por tu autenticador para verificarlo."
                   label="Código de verificación"

@@ -200,6 +200,19 @@ function authorizeAuthenticatedIdentity(
       ok: false,
     };
   }
+  if (
+    result.identity.context.accountStatus === accountStatuses.ACTIVE &&
+    result.identity.context.mfaRequired &&
+    !result.identity.context.mfaSatisfied
+  ) {
+    if (!result.identity.context.sessionValid) {
+      return { error: "ACCOUNT_NOT_ACTIVE", ok: false };
+    }
+    if (!result.identity.context.allowedApplications.includes(application)) {
+      return { error: "APPLICATION_NOT_ALLOWED", ok: false };
+    }
+    return result;
+  }
   const decision = evaluateApplicationAccess(result.identity.context, application);
   if (!decision.allowed) {
     return {

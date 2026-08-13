@@ -1,53 +1,91 @@
-import { Alert, AppLink, Card, Container } from "@preparatoria/ui";
+import {
+  Alert,
+  AppLink,
+  Card,
+  Container,
+  DataTable,
+  DateDisplay,
+  Money,
+  PageHeader,
+  TableBodySection,
+  TableCell,
+  TableHeadCell,
+  TableHeadSection,
+  TableRow,
+} from "@preparatoria/ui";
+
+import { FinancialStatusBadge } from "../../_admin/financial-labels";
 import { requireAdminAccess } from "../../../lib/auth";
+import { getFinancialReportsService } from "../../../lib/financial-reports";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default async function ChargeGenerationPage() {
-  const identity = await requireAdminAccess();
+  await requireAdminAccess();
+  const reports = await getFinancialReportsService();
+  const page = await reports.getCharges({ pageSize: 10 });
 
   return (
     <Container>
-      <Card>
-        <h1>Generación institucional de cargos</h1>
-        <p>
-          Esta superficie coordina preview, revisión, aprobación y ejecución controlada de cargos
-          masivos sin crear un ledger paralelo.
-        </p>
-        <p className="technical-reference">
-          Roles activos: {identity.context.roleCodes.join(", ")}
-        </p>
-        <Alert tone="warning">
-          No existe botón de ejecución directa sin preview, aprobación ni revalidación crítica.
-        </Alert>
-      </Card>
+      <PageHeader
+        description="Vista operativa de cargos ya generados y acceso al flujo controlado de lotes."
+        title="Generación institucional de cargos"
+      />
 
       <Card>
-        <h2>Flujo mínimo</h2>
-        <ol>
-          <li>Seleccionar regla y periodo.</li>
-          <li>Generar preview server-side con elegibilidad cerrada.</li>
-          <li>Revisar elegibles, excluidos, duplicados y revisión manual.</li>
-          <li>Crear batch, someterlo a revisión y aprobarlo.</li>
-          <li>Ejecutar de forma idempotente y revisar el resultado final.</li>
-        </ol>
-      </Card>
-
-      <Card>
-        <h2>Rutas disponibles</h2>
+        <h2>Flujo disponible</h2>
+        <p>Preview obligatorio, revisión, aprobación y ejecución segregada.</p>
         <nav aria-label="Generación de cargos">
           <ul>
             <li>
+              <AppLink href="/finanzas/generacion-cargos/nuevo">Nuevo lote</AppLink>
+            </li>
+            <li>
               <AppLink href="/finanzas/generacion-cargos/reglas">Reglas</AppLink>
-            </li>
-            <li>
-              <AppLink href="/finanzas/generacion-cargos/nuevo">Nuevo batch</AppLink>
-            </li>
-            <li>
-              <AppLink href="/finanzas/generacion-cargos/lote-ejemplo">Detalle de batch</AppLink>
             </li>
           </ul>
         </nav>
+      </Card>
+
+      <Card>
+        <h2>Cargos visibles</h2>
+        {page.rows.length === 0 ? (
+          <Alert tone="info">No hay cargos visibles todavía en el reporte operativo.</Alert>
+        ) : (
+          <DataTable caption="Cargos generados visibles">
+            <TableHeadSection>
+              <TableRow>
+                <TableHeadCell>Matrícula</TableHeadCell>
+                <TableHeadCell>Alumno</TableHeadCell>
+                <TableHeadCell>Concepto</TableHeadCell>
+                <TableHeadCell>Vencimiento</TableHeadCell>
+                <TableHeadCell align="right">Importe original</TableHeadCell>
+                <TableHeadCell align="right">Saldo pendiente</TableHeadCell>
+                <TableHeadCell>Estado</TableHeadCell>
+              </TableRow>
+            </TableHeadSection>
+            <TableBodySection>
+              {page.rows.map((row) => (
+                <TableRow key={row.chargeId}>
+                  <TableCell>{row.studentIdentifier ?? "Sin matrícula"}</TableCell>
+                  <TableCell>{row.studentDisplayName}</TableCell>
+                  <TableCell>{row.concept}</TableCell>
+                  <TableCell>{row.dueDate ? <DateDisplay value={row.dueDate} /> : "—"}</TableCell>
+                  <TableCell align="right">
+                    <Money amount={row.originalAmount} />
+                  </TableCell>
+                  <TableCell align="right">
+                    <Money amount={row.outstanding} />
+                  </TableCell>
+                  <TableCell>
+                    <FinancialStatusBadge value={row.chargeStatus} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBodySection>
+          </DataTable>
+        )}
       </Card>
     </Container>
   );

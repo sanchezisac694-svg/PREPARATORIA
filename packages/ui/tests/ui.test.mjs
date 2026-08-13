@@ -10,7 +10,10 @@ import {
   Button,
   Card,
   Container,
+  DataTable,
   DateDisplay,
+  DescriptionItem,
+  DescriptionList,
   EmptyState,
   ErrorState,
   FormActions,
@@ -26,6 +29,11 @@ import {
   SectionCard,
   Select,
   StatusBadge,
+  TableBodySection,
+  TableCell,
+  TableHeadCell,
+  TableHeadSection,
+  TableRow,
   formatDate,
   formatMoney,
 } from "../dist/index.js";
@@ -175,4 +183,51 @@ test("Breadcrumbs, PageHeader y estados reutilizables se renderizan correctament
   assert.match(markup, /Cargando datos/);
   assert.match(markup, /Sin acceso/);
   assert.match(markup, /ui-form-actions/);
+});
+
+test("DataTable y DescriptionList renderizan HTML semántico reutilizable", () => {
+  const markup = renderToStaticMarkup(
+    createElement(
+      "div",
+      null,
+      createElement(
+        DataTable,
+        { caption: "Resumen operativo" },
+        createElement(
+          TableHeadSection,
+          null,
+          createElement(
+            TableRow,
+            null,
+            createElement(TableHeadCell, null, "Concepto"),
+            createElement(TableHeadCell, { align: "right" }, "Importe"),
+          ),
+        ),
+        createElement(
+          TableBodySection,
+          null,
+          createElement(
+            TableRow,
+            null,
+            createElement(TableCell, null, "Cobro"),
+            createElement(TableCell, { align: "right" }, "$100.00 MXN"),
+          ),
+        ),
+      ),
+      createElement(
+        DescriptionList,
+        null,
+        createElement(DescriptionItem, { label: "Estado", value: "Abierto" }),
+      ),
+    ),
+  );
+
+  assert.match(markup, /<table/);
+  assert.match(markup, /<caption/);
+  assert.match(markup, /<thead/);
+  assert.match(markup, /<tbody/);
+  assert.match(markup, /ui-table-wrapper/);
+  assert.match(markup, /<dl/);
+  assert.match(markup, /<dt/);
+  assert.match(markup, /<dd/);
 });

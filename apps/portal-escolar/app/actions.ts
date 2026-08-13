@@ -39,6 +39,7 @@ export interface LoginState {
 
 export interface MfaActionState {
   readonly error?: string;
+  readonly factorId?: string;
   readonly qrCode?: string;
   readonly secret?: string;
   readonly success?: string;
@@ -175,7 +176,11 @@ export async function beginMfaEnrollmentAction(
       },
       { auth: authentication, identity: { getIdentity: authentication.getAuthenticatedIdentity } },
     );
-    return { qrCode: enrollment.qrCode, secret: enrollment.secret };
+    return {
+      factorId: enrollment.factorId,
+      qrCode: enrollment.qrCode,
+      secret: enrollment.secret,
+    };
   } catch {
     return { error: genericMfaMessage };
   }
@@ -186,12 +191,17 @@ export async function verifyMfaEnrollmentAction(
   formData: FormData,
 ): Promise<MfaActionState> {
   const code = formData.get("code");
-  if (typeof code !== "string") return { error: genericMfaMessage };
+  const factorId = formData.get("factorId");
+  if (typeof code !== "string" || typeof factorId !== "string" || factorId.length === 0) {
+    return { error: genericMfaMessage };
+  }
   const attemptKey = await mfaAttemptKey("MFA_ENROLLMENT_VERIFY");
   if (!mfaAttempts.checkAllowed(attemptKey)) return { error: genericMfaMessage };
   const authentication = await portalAuthentication();
   const factors = await authentication.listFactors();
-  const factor = factors.factors.find((candidate) => candidate.status === "unverified");
+  const factor = factors.factors.find(
+    (candidate) => candidate.id === factorId && candidate.status === "unverified",
+  );
   const hasVerifiedFactor = factors.factors.some((candidate) => candidate.status === "verified");
   if (!factors.ok || !factor) return { error: genericMfaMessage };
   try {
