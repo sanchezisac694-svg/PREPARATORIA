@@ -24,8 +24,8 @@ const migrationFiles = (await readdir(migrationsDirectory))
 
 assert.equal(
   migrationFiles.length,
-  29,
-  "Fase 5 debe conservar veintiocho migraciones previas y a?adir la migraci?n aditiva de reportes financieros y cierres de periodo",
+  30,
+  "Fase 6 debe conservar veintinueve migraciones previas y añadir la migración aditiva de read models administrativos de control escolar",
 );
 
 const initialMigration = await readFile(join(migrationsDirectory, migrationFiles[0]), "utf8");
@@ -83,6 +83,10 @@ const financialBenefitsMigration = await readFile(
 );
 const financialReportsMigration = await readFile(
   join(migrationsDirectory, migrationFiles[28]),
+  "utf8",
+);
+const controlSchoolReadModelsMigration = await readFile(
+  join(migrationsDirectory, migrationFiles[29]),
   "utf8",
 );
 const institutionalAccessSource = await readFile(
@@ -150,7 +154,7 @@ function rolesForApplication(application) {
   return roles;
 }
 
-test("las veintinueve migraciones tienen nombres versionados y transacciones expl?citas", () => {
+test("las treinta migraciones tienen nombres versionados y transacciones explícitas", () => {
   assert.match(migrationFiles[0], /^\d{14}_create_identity_and_roles\.sql$/);
   assert.match(migrationFiles[1], /^\d{14}_link_auth_and_identity_context\.sql$/);
   assert.match(migrationFiles[2], /^\d{14}_add_own_identity_context_access\.sql$/);
@@ -183,6 +187,7 @@ test("las veintinueve migraciones tienen nombres versionados y transacciones exp
     /^\d{14}_create_financial_benefits_and_payment_agreements\.sql$/,
   );
   assert.match(migrationFiles[28], /^\d{14}_create_financial_reports_and_period_closures\.sql$/);
+  assert.match(migrationFiles[29], /^\d{14}_create_control_school_read_models\.sql$/);
   for (const migration of [
     initialMigration,
     authContextMigration,
@@ -207,6 +212,7 @@ test("las veintinueve migraciones tienen nombres versionados y transacciones exp
     collectionsMigration,
     financialBenefitsMigration,
     financialReportsMigration,
+    controlSchoolReadModelsMigration,
   ]) {
     assert.match(migration, /^begin;/i);
     assert.match(migration, /commit;\s*$/i);

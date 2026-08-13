@@ -22,7 +22,18 @@ select ok(coalesce(position('academic' in current_setting('pgrst.db_schemas',tru
 select is((select count(*)::integer from pg_constraint where conrelid='academic.enrollment_commands'::regclass and pg_get_constraintdef(oid) like '%[0-9a-f]{64}%'),1,'commands require SHA-256');
 select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='academic' and p.proname like '%enrollment%' and pg_get_functiondef(p.oid)~* '\mmd5\M'),0,'enrollment functions contain no MD5');
 select is((select count(*)::integer from pg_constraint where connamespace='academic'::regnamespace and contype='f' and conrelid in (select oid from pg_class where relnamespace='academic'::regnamespace and relname in ('student_generations','student_records','enrollment_requests','period_enrollments','student_group_assignments','student_offering_enrollments','academic_progress_decisions','student_status_history','enrollment_commands','student_academic_events')) and confdeltype<>'r'),0,'all new foreign keys restrict deletion');
-select is((select count(*)::integer from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname like '%enrollment%'),0,'no enrollment functions in public');
+select is(
+  (
+    select count(*)::integer
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname like '%enrollment%'
+       and p.proname <> 'list_control_school_enrollments'
+  ),
+  0,
+  'no enrollment functions in public outside the approved control school read wrapper'
+);
 select is((select count(*)::integer from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname='auth' and not t.tgisinternal and t.tgname like '%student%'),0,'no Auth triggers added');
 select is((select count(*)::integer from pg_trigger where tgfoid='academic.guard_student_academic_history()'::regprocedure and not tgisinternal),10,'all new tables have history guards');
 select is((select count(*)::integer from pg_trigger where tgrelid='academic.student_academic_events'::regclass and tgfoid='academic.guard_student_academic_history()'::regprocedure and not tgisinternal),1,'events are append-only');

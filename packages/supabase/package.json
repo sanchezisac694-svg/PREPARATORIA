@@ -52,6 +52,10 @@
       "types": "./src/collections.ts",
       "default": "./dist/collections.js"
     },
+    "./control-school": {
+      "types": "./src/control-school.ts",
+      "default": "./dist/control-school.js"
+    },
     "./financial-benefits": {
       "types": "./src/financial-benefits.ts",
       "default": "./dist/financial-benefits.js"
