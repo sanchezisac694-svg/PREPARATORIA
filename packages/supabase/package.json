@@ -28,6 +28,10 @@
       "types": "./src/grade-management.ts",
       "default": "./dist/grade-management.js"
     },
+    "./grade-management-public": {
+      "types": "./src/grade-management-public.ts",
+      "default": "./dist/grade-management-public.js"
+    },
     "./guardian-portal": {
       "types": "./src/guardian-portal.ts",
       "default": "./dist/guardian-portal.js"
