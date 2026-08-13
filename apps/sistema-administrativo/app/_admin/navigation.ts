@@ -1,20 +1,30 @@
-import type { Role } from "@preparatoria/authz";
+import { permissions, type Permission, type Role } from "@preparatoria/authz";
 
-export type AdminNavGroupKey = "caja" | "finanzas" | "inicio" | "seguridad";
+export type AdminNavGroupKey = "caja" | "control_escolar" | "finanzas" | "inicio" | "seguridad";
 
 export type AdminNavItem = Readonly<{
   description?: string;
   group: AdminNavGroupKey;
   href: string;
   icon:
-    "caja" | "cargos" | "cierre" | "cobranza" | "convenios" | "inicio" | "reporte" | "seguridad";
+    | "academico"
+    | "caja"
+    | "cargos"
+    | "cierre"
+    | "cobranza"
+    | "convenios"
+    | "inicio"
+    | "reporte"
+    | "seguridad";
   label: string;
   match?: (pathname: string) => boolean;
+  requiredPermissions?: readonly Permission[];
   shortLabel?: string;
 }>;
 
 export const adminNavGroups = Object.freeze({
   caja: "Caja",
+  control_escolar: "Control escolar",
   finanzas: "Finanzas",
   inicio: "Inicio",
   seguridad: "Seguridad",
@@ -28,6 +38,47 @@ export const adminNavigation = Object.freeze<readonly AdminNavItem[]>([
     icon: "inicio",
     label: "Inicio",
     match: (pathname) => pathname === "/" || pathname === "/inicio" || pathname === "/dashboard",
+  },
+  {
+    description: "Consulta administrativa de alumnado e historial visible.",
+    group: "control_escolar",
+    href: "/control-escolar/alumnos",
+    icon: "academico",
+    label: "Alumnos",
+    match: (pathname) => pathname.startsWith("/control-escolar/alumnos"),
+    requiredPermissions: [permissions.ACADEMIC_STUDENTS_READ],
+  },
+  {
+    description: "Consulta grupos, alumnado asignado y horario visible.",
+    group: "control_escolar",
+    href: "/control-escolar/grupos",
+    icon: "academico",
+    label: "Grupos",
+    match: (pathname) => pathname.startsWith("/control-escolar/grupos"),
+    requiredPermissions: [permissions.ACADEMIC_GROUPS_READ],
+  },
+  {
+    description: "Consulta inscripciones administrativas con filtros reales.",
+    group: "control_escolar",
+    href: "/control-escolar/inscripciones",
+    icon: "academico",
+    label: "Inscripciones",
+    match: (pathname) => pathname.startsWith("/control-escolar/inscripciones"),
+    requiredPermissions: [permissions.ACADEMIC_ENROLLMENTS_READ],
+  },
+  {
+    description: "Consulta la estructura académica consolidada.",
+    group: "control_escolar",
+    href: "/control-escolar/estructura",
+    icon: "academico",
+    label: "Estructura académica",
+    match: (pathname) => pathname.startsWith("/control-escolar/estructura"),
+    requiredPermissions: [
+      permissions.ACADEMIC_PERIODS_READ,
+      permissions.ACADEMIC_PLANS_READ,
+      permissions.ACADEMIC_SUBJECTS_READ,
+      permissions.ACADEMIC_GROUPS_READ,
+    ],
   },
   {
     group: "caja",
@@ -180,6 +231,7 @@ export function getAdminPageCopy(pathname: string) {
   }
 
   const descriptions: Record<string, string> = {
+    Alumnos: "Consulta alumnado, trayectoria visible y estado institucional actual.",
     "Becas y descuentos":
       "Administra beneficios financieros con contexto y lenguaje administrativo.",
     Arqueo: "Revisa conteos, diferencias y conciliación con una vista más usable.",
@@ -188,9 +240,13 @@ export function getAdminPageCopy(pathname: string) {
       "Consulta cierres operativos financieros y su historial dentro del shell administrativo.",
     Cobranza: "Consulta y da seguimiento administrativo a cuentas con adeudo.",
     Convenios: "Consulta y prepara convenios de pago dentro de una navegación consistente.",
+    "Estructura académica":
+      "Consulta ciclos, periodos, planes, materias y grupos sin exponer detalles técnicos.",
     "Generación de cargos":
       "Coordina la generación institucional de cargos con navegación y contexto unificados.",
+    Grupos: "Consulta grupos, horario y asignaciones visibles de Control Escolar.",
     Inicio: "Accede rápidamente a los módulos administrativos disponibles.",
+    Inscripciones: "Consulta inscripciones visibles con filtros y paginación reales.",
     MFA: "Administra autenticación reforzada y pasos de verificación.",
     Movimientos: "Registra movimientos manuales autorizados con mejor contexto operativo.",
     "Nuevo cobro": "Prepara el flujo de cobro presencial dentro del shell administrativo.",

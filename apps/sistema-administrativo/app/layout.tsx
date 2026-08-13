@@ -26,6 +26,7 @@ export default async function RootLayout({ children }: RootLayoutProps) {
         ? {
             primaryRole: result.identity.context.roleCodes[0] ?? null,
             roleCount: result.identity.context.roleCodes.length,
+            roleCodes: result.identity.context.roleCodes,
           }
         : null,
     )

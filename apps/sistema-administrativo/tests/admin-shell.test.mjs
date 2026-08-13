@@ -13,18 +13,23 @@ test("el shell administrativo centraliza navegación, contexto y exclusiones pú
 
   assert.match(layout, /AdminShell/);
   assert.match(layout, /logoutAction/);
+  assert.match(layout, /roleCodes/);
   assert.match(shell, /aria-label="Secciones administrativas"/);
   assert.match(shell, /aria-current=\{isActive \? "page" : undefined\}/);
   assert.match(shell, /aria-controls="admin-navigation-drawer"/);
   assert.match(shell, /aria-expanded=\{drawerOpen\}/);
   assert.match(shell, /Breadcrumbs/);
+  assert.match(shell, /hasAnyPermission/);
   assert.match(navigation, /Generación de cargos/);
   assert.match(navigation, /Recuperaciones MFA/);
+  assert.match(navigation, /Control escolar/);
+  assert.match(navigation, /\/control-escolar\/alumnos/);
   assert.match(navigation, /isPublicAdminPath/);
-  assert.doesNotMatch(navigation, /Alumnos|Docentes|Configuración/);
+  assert.doesNotMatch(navigation, /Docentes|Configuración/);
   assert.match(dashboard, /PageHeader/);
   assert.match(dashboard, /StatusBadge/);
   assert.match(globals, /admin-shell__sidebar/);
+  assert.match(globals, /control-school-metric-grid/);
   assert.match(globals, /@media \(min-width: 1024px\)/);
 });
 
@@ -35,6 +40,7 @@ test("la navegación global permanece en español y evita términos técnicos cr
   );
 
   assert.match(navigation, /"Inicio"/);
+  assert.match(navigation, /"Control escolar"/);
   assert.match(navigation, /"Caja"/);
   assert.match(navigation, /"Finanzas"/);
   assert.match(navigation, /"Seguridad"/);

@@ -1,5 +1,6 @@
 "use client";
 
+import { hasAnyPermission, type Role } from "@preparatoria/authz";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AppLink, Breadcrumbs, Button, PageContainer, StatusBadge } from "@preparatoria/ui";
 import { usePathname } from "next/navigation";
@@ -14,16 +15,7 @@ import {
   isPublicAdminPath,
 } from "./navigation";
 
-type RoleCode =
-  | "ADMINISTRATIVO"
-  | "ALUMNO"
-  | "ASPIRANTE"
-  | "CAJA"
-  | "CONTROL_ESCOLAR"
-  | "DOCENTE"
-  | "PREFECTURA"
-  | "SUPERADMIN"
-  | "TUTOR";
+type RoleCode = Role | "PREFECTURA";
 
 type AdminShellProps = Readonly<{
   children: ReactNode;
@@ -31,6 +23,7 @@ type AdminShellProps = Readonly<{
   userSummary: {
     readonly primaryRole: RoleCode | null;
     readonly roleCount: number;
+    readonly roleCodes: readonly RoleCode[];
   } | null;
 }>;
 
@@ -51,6 +44,14 @@ function Icon({ name }: Readonly<{ name: (typeof adminNavigation)[number]["icon"
         <svg aria-hidden="true" {...common}>
           <path d="M3 10.5 12 3l9 7.5" />
           <path d="M5.5 9.5V21h13V9.5" />
+        </svg>
+      );
+    case "academico":
+      return (
+        <svg aria-hidden="true" {...common}>
+          <path d="M3 8.5 12 4l9 4.5-9 4.5-9-4.5Z" />
+          <path d="M7 11.5V15c0 1.7 2.2 3 5 3s5-1.3 5-3v-3.5" />
+          <path d="M21 9v6" />
         </svg>
       );
     case "caja":
@@ -141,12 +142,26 @@ export function AdminShell({ children, logoutAction, userSummary }: AdminShellPr
   }, [drawerOpen]);
 
   const groupedNavigation = useMemo(() => {
-    return Object.entries(adminNavGroups).map(([group, label]) => ({
-      items: adminNavigation.filter((item) => item.group === group),
-      key: group,
-      label,
-    }));
-  }, []);
+    const roles = userSummary?.roleCodes ?? [];
+
+    return Object.entries(adminNavGroups)
+      .map(([group, label]) => ({
+        items: adminNavigation.filter((item) => {
+          if (item.group !== group) {
+            return false;
+          }
+
+          if (!item.requiredPermissions || item.requiredPermissions.length === 0) {
+            return true;
+          }
+
+          return hasAnyPermission(roles, item.requiredPermissions);
+        }),
+        key: group,
+        label,
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [userSummary?.roleCodes]);
 
   if (publicPath) {
     return <>{children}</>;
@@ -181,6 +196,7 @@ export function AdminShell({ children, logoutAction, userSummary }: AdminShellPr
                   const isActive = item.match
                     ? item.match(pathname)
                     : pathname.startsWith(item.href);
+
                   return (
                     <li key={item.href}>
                       <AppLink

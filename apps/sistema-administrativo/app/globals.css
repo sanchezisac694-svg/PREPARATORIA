@@ -261,6 +261,43 @@ a {
   gap: var(--space-4);
 }
 
+.control-school-metric-grid,
+.control-school-filter-form,
+.control-school-filters,
+.control-school-inline-stack,
+.control-school-structure-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.control-school-filters {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  align-items: end;
+}
+
+.control-school-filter-actions,
+.control-school-badge-row,
+.control-school-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.control-school-filter-actions {
+  align-self: end;
+}
+
+.control-school-inline-stack span,
+.control-school-pagination span {
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.control-school-structure-grid {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
 .dashboard-action-card,
 .dashboard-module-card {
   display: grid;
@@ -545,6 +582,10 @@ a {
 
 @media (min-width: 1024px) {
   .dashboard-metric-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .control-school-metric-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
