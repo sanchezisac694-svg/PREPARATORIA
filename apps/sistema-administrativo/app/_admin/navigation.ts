@@ -67,6 +67,23 @@ export const adminNavigation = Object.freeze<readonly AdminNavItem[]>([
     requiredPermissions: [permissions.ACADEMIC_ENROLLMENTS_READ],
   },
   {
+    description: "Consulta calificaciones, resultados, ventanas y correcciones autorizadas.",
+    group: "control_escolar",
+    href: "/control-escolar/calificaciones",
+    icon: "academico",
+    label: "Calificaciones",
+    match: (pathname) => pathname.startsWith("/control-escolar/calificaciones"),
+    requiredPermissions: [
+      permissions.ACADEMIC_GRADES_READ,
+      permissions.ACADEMIC_GRADES_CAPTURE,
+      permissions.ACADEMIC_GRADES_REVIEW,
+      permissions.ACADEMIC_GRADES_FINALIZE,
+      permissions.ACADEMIC_GRADES_CORRECT,
+      permissions.ACADEMIC_GRADE_WINDOWS_MANAGE,
+      permissions.ACADEMIC_SUBJECT_RESULTS_READ,
+    ],
+  },
+  {
     description: "Consulta la estructura académica consolidada.",
     group: "control_escolar",
     href: "/control-escolar/estructura",
@@ -234,6 +251,8 @@ export function getAdminPageCopy(pathname: string) {
     Alumnos: "Consulta alumnado, trayectoria visible y estado institucional actual.",
     "Becas y descuentos":
       "Administra beneficios financieros con contexto y lenguaje administrativo.",
+    Calificaciones:
+      "Consulta offerings, captura por unidad y revisa resultados usando el contrato público de calificaciones.",
     Arqueo: "Revisa conteos, diferencias y conciliación con una vista más usable.",
     Cierre: "Consulta y opera el cierre de turnos con mejor contexto visual.",
     Cierres:
